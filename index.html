@@ -151,7 +151,7 @@
     
     // --- ASSETS ---
     const bgImg = new Image();
-    bgImg.src = 'https://i.imgur.com/yWuMU6w.png'; // New BG without props
+    bgImg.src = 'https://i.imgur.com/ItZx3i7.png'; // New BG with empty fireplace
 
     const snowmanImg = new Image();
     snowmanImg.src = 'https://i.imgur.com/dTTOgiV.png';
@@ -183,6 +183,9 @@
 
     const sillImg = new Image();
     sillImg.src = 'https://i.imgur.com/TpGmLtV.png';
+
+    const fireImg = new Image();
+    fireImg.src = 'https://i.imgur.com/JtpFA54.png';
 
     // Helper to load arrays of images
     const loadImages = (urls) => urls.map(src => {
@@ -401,6 +404,54 @@
             if (this.initialized) {
                 ctx.drawImage(this.img, this.x, this.y, this.w, this.h);
             }
+        }
+    }
+    
+    class Fire extends Entity {
+        constructor() {
+            super(913, 620, 0, 0); // Placeholder
+            this.img = fireImg;
+            this.initialized = false;
+            this.dying = false;
+            // Fire is inside the fireplace, behind floor objects
+            this.zOffset = -50; 
+        }
+
+        update() {
+            super.update();
+            if (!this.initialized && this.img.complete && this.img.naturalWidth > 0) {
+                this.w = this.img.naturalWidth * SCALE * 0.5;
+                this.h = this.img.naturalHeight * SCALE * 0.5;
+                // Center roughly based on mantle center ~913
+                this.x = 913 - (this.w / 2);
+                this.y = 620; 
+                this.initialized = true;
+            }
+
+            if (this.dying && this.hitTimer <= 0) {
+                this.markedForDeletion = true;
+                // Grey smoke particles
+                 for(let k=0; k<12; k++) particles.push(new Particle(this.x+this.w/2, this.y+this.h/2, '#555555', 6, 6));
+            }
+        }
+
+        onHit() {
+            if (this.dying) return;
+            state.score += 15;
+            updateUI();
+            this.isHit = true;
+            this.hitTimer = 10; // Glow for 10 frames
+            this.dying = true;
+        }
+
+        draw(ctx) {
+            if (!this.initialized) return;
+            ctx.save();
+            if (this.isHit) {
+                 ctx.filter = 'sepia(1) saturate(100) hue-rotate(-50deg) contrast(2)';
+            }
+            ctx.drawImage(this.img, this.x, this.y, this.w, this.h);
+            ctx.restore();
         }
     }
     
@@ -864,6 +915,9 @@
         snowballs.length = 0;
         
         // --- Props Placement ---
+        
+        // 0. Fire (Behind everything on wall)
+        entities.push(new Fire());
         
         // 1. Wreath
         entities.push(new Wreath());
