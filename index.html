@@ -1,0 +1,1112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Snowball Sniper - HD Remaster</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+
+        body {
+            margin: 0;
+            background-color: #121212;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+            font-family: 'Press Start 2P', cursive;
+            user-select: none;
+        }
+
+        #game-container {
+            position: relative;
+            /* Responsive Scaling Logic */
+            width: 95vw;
+            height: auto;
+            aspect-ratio: 16/9;
+            max-height: 95vh; /* Prevent it from getting too tall */
+            
+            box-shadow: 0 0 50px rgba(0,0,0,0.9);
+            border: 4px solid #333;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            background-color: #2a1d15; /* Fallback color if BG fails */
+            image-rendering: pixelated;
+            cursor: none; 
+        }
+
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            padding: 30px;
+            box-sizing: border-box;
+            display: flex;
+            justify-content: space-between;
+            color: #fff;
+            text-shadow: 3px 3px 0 #000;
+            font-size: 20px;
+        }
+
+        .hud-item {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .label {
+            font-size: 14px;
+            color: #ccc;
+        }
+
+        .value {
+            font-size: 40px;
+            color: #ffd700;
+        }
+
+        #game-over {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.9);
+            padding: 60px;
+            text-align: center;
+            border: 6px solid white;
+            display: none;
+            z-index: 100;
+        }
+        
+        button {
+            background: #ff0044;
+            color: white;
+            border: 4px solid white;
+            padding: 20px 40px;
+            font-family: 'Press Start 2P', cursive;
+            font-size: 24px;
+            cursor: pointer;
+            margin-top: 30px;
+        }
+        
+        button:hover {
+            background: #cc0033;
+        }
+        
+        .scanlines {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(
+                to bottom,
+                rgba(255,255,255,0),
+                rgba(255,255,255,0) 50%,
+                rgba(0,0,0,0.05) 50%,
+                rgba(0,0,0,0.05)
+            );
+            background-size: 100% 4px;
+            pointer-events: none;
+            opacity: 0.4;
+        }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <!-- Updated Resolution to 1920x1080 -->
+    <canvas id="gameCanvas" width="1920" height="1080"></canvas>
+    <div class="scanlines"></div>
+    
+    <div id="ui-layer">
+        <div class="hud-item">
+            <span class="label">SCORE</span>
+            <span class="value" id="score-display">0000</span>
+        </div>
+        <div class="hud-item" style="align-items: flex-end;">
+            <span class="label">TIME</span>
+            <span class="value" id="time-display">60</span>
+        </div>
+    </div>
+
+    <div id="game-over">
+        <h1 style="color: #ff4444; margin-top: 0; font-size: 48px;">TIME'S UP!</h1>
+        <p style="font-size: 24px;">FINAL SCORE</p>
+        <p class="value" id="final-score" style="font-size: 60px; margin: 20px 0;">0</p>
+        <button onclick="resetGame()">PLAY AGAIN</button>
+    </div>
+</div>
+
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    
+    // --- ASSETS ---
+    const bgImg = new Image();
+    bgImg.src = 'https://i.imgur.com/yWuMU6w.png'; // New BG without props
+
+    const snowmanImg = new Image();
+    snowmanImg.src = 'https://i.imgur.com/dTTOgiV.png';
+
+    const santaImg = new Image();
+    santaImg.src = 'https://i.imgur.com/HwBT5VO.png';
+
+    const elfImg = new Image();
+    elfImg.src = 'https://i.imgur.com/dqAFiWH.png';
+
+    const reindeerImg = new Image();
+    reindeerImg.src = 'https://i.imgur.com/TZcZHMg.png';
+
+    const bearAliveImg = new Image();
+    bearAliveImg.src = 'https://i.imgur.com/sbiJDNt.png';
+    const bearDeadImg = new Image();
+    bearDeadImg.src = 'https://i.imgur.com/YwRuc8l.png';
+
+    const dogSleepImg = new Image();
+    dogSleepImg.src = 'https://i.imgur.com/rfiGDKY.png';
+    const dogAwakeImg = new Image();
+    dogAwakeImg.src = 'https://i.imgur.com/spGomDQ.png';
+
+    const treeImg = new Image();
+    treeImg.src = 'https://i.imgur.com/8Ax38hR.png';
+
+    const wreathImg = new Image();
+    wreathImg.src = 'https://i.imgur.com/n9Cmgy1.png';
+
+    const sillImg = new Image();
+    sillImg.src = 'https://i.imgur.com/TpGmLtV.png';
+
+    // Helper to load arrays of images
+    const loadImages = (urls) => urls.map(src => {
+        const img = new Image();
+        img.src = src;
+        return img;
+    });
+
+    const giftImgs = loadImages([
+        'https://i.imgur.com/yQLkIGn.png',
+        'https://i.imgur.com/8NcF30V.png',
+        'https://i.imgur.com/2aqEFuj.png',
+        'https://i.imgur.com/Sm1j1SK.png',
+        'https://i.imgur.com/V8NiRZY.png'
+    ]);
+
+    const frameImgs = loadImages([
+        'https://i.imgur.com/aoKffUf.png',
+        'https://i.imgur.com/YrMecoJ.png',
+        'https://i.imgur.com/O0u0XAO.png',
+        'https://i.imgur.com/4zlVUkA.png',
+        'https://i.imgur.com/kTgC5aX.png',
+        'https://i.imgur.com/oC4Ct9q.png'
+    ]);
+
+    const lightImgs = loadImages([
+        'https://i.imgur.com/9HECKLv.png',
+        'https://i.imgur.com/pIGEzk9.png',
+        'https://i.imgur.com/VeZet18.png',
+        'https://i.imgur.com/OdCInfr.png',
+        'https://i.imgur.com/J6oR4b4.png',
+        'https://i.imgur.com/dNvLgX0.png',
+        'https://i.imgur.com/AWv5MAq.png',
+        'https://i.imgur.com/PaKdrFO.png',
+        'https://i.imgur.com/96cHRWm.png',
+        'https://i.imgur.com/0BBFJEq.png'
+    ]);
+
+    const sockImgs = loadImages([
+        'https://i.imgur.com/ipuoMGf.png',
+        'https://i.imgur.com/JokSc9E.png',
+        'https://i.imgur.com/JtKyxoz.png'
+    ]);
+
+    const windowImgs = {
+        normal: loadImages([
+            'https://i.imgur.com/nPvNZZQ.png', // TL
+            'https://i.imgur.com/U7rdB4u.png', // TR
+            'https://i.imgur.com/WLeB2rG.png', // BL
+            'https://i.imgur.com/hL4DfE2.png'  // BR
+        ]),
+        broken: loadImages([
+            'https://i.imgur.com/xXwbOdk.png', // TL
+            'https://i.imgur.com/fXLheVS.png', // TR
+            'https://i.imgur.com/1G8g2eQ.png', // BL
+            'https://i.imgur.com/VCth7xd.png'  // BR
+        ])
+    };
+
+    // Global Scaling Factor (1920 / 800 = ~2.4)
+    const SCALE = 2.4; 
+
+    let state = {
+        score: 0,
+        time: 60,
+        active: true,
+        shake: 0
+    };
+
+    const mouse = { x: 0, y: 0 };
+
+    // Lists
+    const entities = [];
+    const particles = [];
+    const snowballs = [];
+
+    // --- CLASSES ---
+
+    class Particle {
+        constructor(x, y, color, speed = 15, size = 4) {
+            this.x = x;
+            this.y = y;
+            this.vx = (Math.random() - 0.5) * speed;
+            this.vy = (Math.random() - 0.5) * speed;
+            this.life = 1.0;
+            this.color = color;
+            this.size = (Math.random() * size + 2) * SCALE;
+        }
+        update() {
+            this.x += this.vx;
+            this.y += this.vy;
+            this.vy += 0.4; 
+            this.life -= 0.05;
+        }
+        draw(ctx) {
+            ctx.globalAlpha = Math.max(0, this.life);
+            ctx.fillStyle = this.color;
+            ctx.fillRect(this.x, this.y, this.size, this.size);
+            ctx.globalAlpha = 1.0;
+        }
+    }
+
+    class Snowball {
+        constructor(targetX, targetY) {
+            this.startX = canvas.width / 2;
+            this.startY = canvas.height;
+            this.x = this.startX;
+            this.y = this.startY;
+            
+            this.targetX = targetX;
+            this.targetY = targetY;
+            
+            this.speed = 0.05;
+            this.progress = 0;
+            this.markedForDeletion = false;
+        }
+
+        update() {
+            this.progress += this.speed;
+            
+            this.x = this.startX + (this.targetX - this.startX) * this.progress;
+            this.y = this.startY + (this.targetY - this.startY) * this.progress;
+
+            if (this.progress >= 1) {
+                this.x = this.targetX;
+                this.y = this.targetY;
+                this.explode();
+            }
+        }
+
+        explode() {
+            this.markedForDeletion = true;
+            checkCollision(this.x, this.y);
+            for(let i=0; i<8; i++) {
+                particles.push(new Particle(this.x, this.y, '#ffffff'));
+            }
+        }
+
+        draw(ctx) {
+            const scale = 1.0 - (this.progress * 0.5); 
+            const size = (15 * SCALE) * scale;
+
+            ctx.fillStyle = '#fff';
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, size, 0, Math.PI * 2);
+            ctx.fill();
+        }
+    }
+
+    class Entity {
+        constructor(x, y, w, h) {
+            this.x = x;
+            this.y = y;
+            this.w = w;
+            this.h = h;
+            this.markedForDeletion = false;
+            this.isHit = false; 
+            this.hitTimer = 0;
+            // Default Z for basic props. Can be overridden.
+            // Items "on wall" are far back (low Z).
+            this.zOffset = 0; 
+        }
+
+        getZ() {
+            return this.y + this.h + this.zOffset;
+        }
+
+        draw(ctx) {
+            ctx.fillStyle = 'magenta';
+            ctx.fillRect(this.x, this.y, this.w, this.h);
+        }
+
+        update() {
+            if (this.isHit) {
+                this.hitTimer--;
+                if (this.hitTimer <= 0) this.isHit = false;
+            }
+        }
+
+        checkHit(mx, my) {
+            return (mx >= this.x && mx <= this.x + this.w &&
+                    my >= this.y && my <= this.y + this.h);
+        }
+
+        onHit() { }
+    }
+
+    // --- PROPS ---
+
+    class SimpleProp extends Entity {
+        constructor(img, x, y, onHitCallback) {
+            super(x, y, 0, 0); 
+            this.img = img;
+            this.onHitCallback = onHitCallback;
+            this.initialized = false;
+        }
+
+        update() {
+            super.update();
+            if (!this.initialized && this.img.complete && this.img.naturalWidth > 0) {
+                this.w = this.img.naturalWidth * SCALE * 0.5;
+                this.h = this.img.naturalHeight * SCALE * 0.5;
+                this.initialized = true;
+            }
+        }
+
+        onHit() {
+            if (!this.onHitCallback) return; // Static props logic
+            this.markedForDeletion = true; 
+            state.score += 15;
+            updateUI();
+            this.onHitCallback(this.x, this.y, this.w, this.h);
+        }
+
+        draw(ctx) {
+            if (this.initialized) {
+                ctx.drawImage(this.img, this.x, this.y, this.w, this.h);
+            }
+        }
+    }
+    
+    class WindowPane extends Entity {
+        constructor(normalImg, brokenImg, x, y) {
+            super(x, y, 0, 0);
+            this.normalImg = normalImg;
+            this.brokenImg = brokenImg;
+            this.isBroken = false;
+            this.initialized = false;
+            // Windows are behind the sill
+            this.zOffset = -50; 
+        }
+        
+        update() {
+            super.update();
+            if (!this.initialized && this.normalImg.complete && this.normalImg.naturalWidth > 0) {
+                this.w = this.normalImg.naturalWidth * SCALE * 0.5;
+                this.h = this.normalImg.naturalHeight * SCALE * 0.5;
+                this.initialized = true;
+            }
+        }
+        
+        onHit() {
+            if (!this.isBroken) {
+                this.isBroken = true;
+                state.score += 15;
+                updateUI();
+                // Glass shards
+                for(let k=0; k<15; k++) particles.push(new Particle(this.x+this.w/2, this.y+this.h/2, '#a8e6cf', 12, 3));
+            }
+        }
+        
+        draw(ctx) {
+            if (!this.initialized) return;
+            const img = this.isBroken ? this.brokenImg : this.normalImg;
+            if (img.complete && img.naturalWidth > 0) {
+                ctx.drawImage(img, this.x, this.y, this.w, this.h);
+            }
+        }
+    }
+    
+    class Wreath extends Entity {
+         constructor() {
+            super(830, 146, 0, 0); 
+            this.img = wreathImg;
+            this.initialized = false;
+            this.shakeOffset = 0;
+            this.hasGivenPoints = false;
+        }
+
+        update() {
+            super.update();
+            if (this.shakeOffset !== 0) {
+                this.shakeOffset = -this.shakeOffset * 0.8;
+                if (Math.abs(this.shakeOffset) < 1) this.shakeOffset = 0;
+            }
+            if (!this.initialized && this.img.complete && this.img.naturalWidth > 0) {
+                this.w = this.img.naturalWidth * SCALE * 0.5;
+                this.h = this.img.naturalHeight * SCALE * 0.5;
+                this.initialized = true;
+            }
+        }
+
+        onHit() {
+            this.shakeOffset = 5;
+            this.isHit = true;
+            this.hitTimer = 10;
+            if (!this.hasGivenPoints) {
+                this.hasGivenPoints = true;
+                state.score += 15;
+                updateUI();
+            }
+        }
+
+        draw(ctx) {
+            if (!this.initialized) return;
+            
+            ctx.save();
+            ctx.translate(this.shakeOffset, 0);
+            if (this.isHit) {
+                 ctx.filter = 'sepia(1) saturate(100) hue-rotate(-50deg) contrast(2)';
+            }
+            ctx.drawImage(this.img, this.x, this.y, this.w, this.h);
+            ctx.restore();
+        }
+    }
+
+    class Tree extends Entity {
+        constructor() {
+            super(116, 847 - 100, 100, 100); 
+            this.shakeOffset = 0;
+            this.hasGivenPoints = false;
+            this.targetBottomY = 1080 - 233; // 847
+        }
+
+        update() {
+            super.update();
+            if (this.shakeOffset !== 0) {
+                this.shakeOffset = -this.shakeOffset * 0.8;
+                if (Math.abs(this.shakeOffset) < 1) this.shakeOffset = 0;
+            }
+            
+            if (treeImg.complete && treeImg.naturalWidth > 0) {
+                this.w = treeImg.naturalWidth * SCALE * 0.5;
+                this.h = treeImg.naturalHeight * SCALE * 0.5;
+                this.y = this.targetBottomY - this.h;
+            }
+        }
+
+        onHit() {
+            this.shakeOffset = 15;
+            if (!this.hasGivenPoints) {
+                this.hasGivenPoints = true;
+                state.score += 15;
+                updateUI();
+                for(let i=0; i<10; i++) {
+                    particles.push(new Particle(this.x + Math.random()*this.w, this.y + Math.random()*this.h, '#2d6e32'));
+                }
+            } else {
+                 for(let i=0; i<3; i++) {
+                    particles.push(new Particle(this.x + Math.random()*this.w, this.y + Math.random()*this.h, '#2d6e32'));
+                }
+            }
+        }
+
+        draw(ctx) {
+            ctx.save();
+            ctx.translate(this.shakeOffset, 0);
+            
+            if (treeImg.complete && treeImg.naturalWidth > 0) {
+                ctx.drawImage(treeImg, this.x, this.y, this.w, this.h);
+            } else {
+                ctx.fillStyle = '#0f441e';
+                ctx.fillRect(this.x, this.y, 200, 400);
+            }
+
+            ctx.restore();
+        }
+    }
+
+    class Gift extends Entity {
+        constructor(index, startX, bottomY, img) {
+            super(startX, 0, 0, 0); 
+            this.index = index;
+            this.bottomY = bottomY;
+            this.img = img;
+            this.initialized = false;
+            this.color = ['#ff0000', '#00ff00', '#0000ff', '#ffff00', '#00ffff'][index];
+        }
+
+        update() {
+            super.update();
+            if (!this.initialized && this.img.complete && this.img.naturalWidth > 0) {
+                this.w = this.img.naturalWidth * SCALE * 0.5;
+                this.h = this.img.naturalHeight * SCALE * 0.5;
+                this.y = this.bottomY - this.h;
+                this.initialized = true;
+            }
+        }
+
+        onHit() {
+            state.score += 15;
+            updateUI();
+            this.markedForDeletion = true;
+            
+            const gridSize = 6;
+            const cols = this.w / gridSize;
+            const rows = this.h / gridSize;
+            
+            for(let r=0; r<rows; r+=2) {
+                for(let c=0; c<cols; c+=2) {
+                    particles.push(new Particle(
+                        this.x + c * gridSize, 
+                        this.y + r * gridSize, 
+                        this.color,
+                        8, 4
+                    ));
+                }
+            }
+        }
+
+        draw(ctx) {
+            if (this.initialized) {
+                ctx.drawImage(this.img, this.x, this.y, this.w, this.h);
+            }
+        }
+    }
+
+    class Bear extends Entity {
+        constructor() {
+            super(1700, 900, 100, 100); 
+            this.alive = true;
+            this.shakeOffset = 0;
+            this.targetX1 = 1760;
+            this.targetY1 = 950; 
+            this.targetX2 = 1770;
+            this.targetY2 = 937;
+        }
+
+        update() {
+            super.update();
+            if (this.shakeOffset !== 0) {
+                this.shakeOffset = -this.shakeOffset * 0.8;
+                if (Math.abs(this.shakeOffset) < 1) this.shakeOffset = 0;
+            }
+
+            let img = this.alive ? bearAliveImg : bearDeadImg;
+            if (img.complete && img.naturalWidth > 0) {
+                this.w = img.naturalWidth * SCALE * 0.5; 
+                this.h = img.naturalHeight * SCALE * 0.5;
+                const targetX = this.alive ? this.targetX1 : this.targetX2;
+                const targetY = this.alive ? this.targetY1 : this.targetY2;
+                this.x = targetX - this.w;
+                this.y = targetY - this.h;
+            }
+        }
+
+        onHit() {
+            this.shakeOffset = 15;
+            this.isHit = true;
+            this.hitTimer = 10;
+            if (this.alive) {
+                this.alive = false;
+                state.score += 15;
+                updateUI();
+                for(let i=0; i<8; i++) particles.push(new Particle(this.x + this.w/2, this.y + this.h/2, '#8d5524'));
+            } else {
+                 for(let i=0; i<3; i++) particles.push(new Particle(this.x + this.w/2, this.y + this.h/2, '#5e3a1b'));
+            }
+        }
+
+        draw(ctx) {
+            ctx.save();
+            ctx.translate(this.shakeOffset, 0);
+            if (this.isHit) {
+                 ctx.filter = 'sepia(1) saturate(100) hue-rotate(-50deg) contrast(2)';
+            }
+            let img = this.alive ? bearAliveImg : bearDeadImg;
+            if (img.complete && img.naturalWidth > 0) {
+                 ctx.drawImage(img, this.x, this.y, this.w, this.h);
+            }
+            ctx.restore();
+        }
+    }
+
+    class Dog extends Entity {
+        constructor() {
+            super(1300, 1000, 100, 50);
+            this.state = 'sleeping'; 
+            this.wakeTimer = 0;
+            this.hasGivenPoints = false;
+            this.targetX1 = 1377;
+            this.targetY1 = 1060;
+            this.targetX2 = 1333;
+            this.targetY2 = 1047;
+        }
+
+        update() {
+            super.update();
+            if (this.state === 'awake') {
+                this.wakeTimer--;
+                if (this.wakeTimer <= 0) this.state = 'sleeping';
+            }
+
+            let img = this.state === 'sleeping' ? dogSleepImg : dogAwakeImg;
+            if (img.complete && img.naturalWidth > 0) {
+                this.w = img.naturalWidth * SCALE * 0.5; 
+                this.h = img.naturalHeight * SCALE * 0.5;
+                const targetX = this.state === 'sleeping' ? this.targetX1 : this.targetX2;
+                const targetY = this.state === 'sleeping' ? this.targetY1 : this.targetY2;
+                this.x = targetX - this.w;
+                this.y = targetY - this.h;
+            }
+        }
+
+        onHit() {
+            this.state = 'awake';
+            this.wakeTimer = 100; 
+            if (!this.hasGivenPoints) {
+                this.hasGivenPoints = true;
+                state.score += 15;
+                updateUI();
+                for(let i=0; i<8; i++) particles.push(new Particle(this.x + this.w/2, this.y, '#c28848'));
+            } else {
+                for(let i=0; i<3; i++) particles.push(new Particle(this.x + this.w/2, this.y, '#c28848'));
+            }
+        }
+
+        draw(ctx) {
+            let img = this.state === 'sleeping' ? dogSleepImg : dogAwakeImg;
+            if (img.complete && img.naturalWidth > 0) {
+                 ctx.drawImage(img, this.x, this.y, this.w, this.h);
+            } else {
+                ctx.fillStyle = this.state === 'sleeping' ? '#8b4513' : '#cd853f';
+                ctx.fillRect(this.x, this.y, this.w, this.h);
+            }
+            
+            if (this.state === 'sleeping' && Math.floor(Date.now() / 800) % 2 === 0) {
+                ctx.fillStyle = 'white';
+                ctx.font = '30px monospace'; 
+                ctx.fillText('Zzz', 1017, 925);
+            }
+        }
+    }
+
+    // --- ENEMIES ---
+
+    class Enemy extends Entity {
+        constructor(type) {
+            super(-400, 0, 0, 0); 
+            this.type = type;
+            this.direction = Math.random() > 0.5 ? 1 : -1;
+            this.baseY = 850 + Math.random() * 200; 
+            this.hopPhase = Math.random() * Math.PI * 2;
+            
+            if (type === 'snowman') {
+                this.w = 160 * 2.4; this.h = 280 * 2.4;
+                this.speed = (Math.random() * 1.5 + 0.5) * 1.5; 
+                this.scoreVal = 100;
+                this.color = '#fff';
+            } else if (type === 'elf') {
+                this.w = 50 * 2.4; this.h = 80 * 2.4;
+                this.speed = (Math.random() * 1.5 + 1.5) * 1.5; 
+                this.scoreVal = 200;
+                this.color = '#52b748';
+                this.bounceOffset = 0;
+            } else if (type === 'santa') {
+                this.w = 240 * 2.4; this.h = 240 * 2.4;
+                this.speed = 3.6 * 1.5; 
+                this.scoreVal = 1000;
+                this.color = '#d32f2f';
+            } else if (type === 'reindeer') {
+                this.w = 60 * 2.4; this.h = 60 * 2.4; 
+                this.speed = 2 * 1.5;
+                this.scoreVal = 50;
+                this.color = '#8B4513';
+                this.bounceOffset = 0;
+            }
+
+            this.y = this.baseY - this.h; 
+            
+            if (this.direction === 1) {
+                this.x = -this.w - 100;
+            } else {
+                this.x = canvas.width + 100;
+            }
+        }
+
+        update() {
+            super.update();
+            this.x += this.speed * this.direction;
+
+            if (this.type === 'elf' || this.type === 'reindeer') {
+                const time = Date.now() / 100 + this.hopPhase;
+                const absSin = Math.abs(Math.sin(time));
+                const bounceHeight = (this.type === 'reindeer') ? 15 * SCALE : 50 * SCALE;
+
+                this.bounceOffset = absSin * bounceHeight;
+                this.y = (this.baseY - this.h) - this.bounceOffset;
+                this.bounceFactor = absSin;
+            }
+
+            if ((this.direction === 1 && this.x > canvas.width) ||
+                (this.direction === -1 && this.x < -this.w)) {
+                this.markedForDeletion = true;
+            }
+        }
+
+        onHit() {
+            state.score += this.scoreVal;
+            updateUI();
+            
+            for(let i=0; i<15; i++) {
+                particles.push(new Particle(this.x + this.w/2, this.y + this.h/2, this.color));
+            }
+            
+            this.markedForDeletion = true;
+        }
+
+        draw(ctx) {
+            
+            if (this.isHit) {
+                ctx.save();
+                ctx.filter = 'sepia(1) saturate(100) hue-rotate(-50deg) contrast(2)';
+            } else {
+                ctx.fillStyle = this.color;
+            }
+
+            if (this.type === 'snowman') {
+                const hopCycle = Math.sin((Date.now() / 400) + this.hopPhase); 
+                const absHop = Math.abs(hopCycle); 
+                const jumpHeight = (20 * SCALE) * absHop;
+                
+                let stretch = 1.0 + (absHop * 0.2);
+                let squash = 1.0 - (absHop * 0.1); 
+                
+                if (absHop < 0.2) { stretch = 0.9; squash = 1.1; }
+
+                const drawX = this.x;
+                const drawY = (this.baseY - this.h) - jumpHeight;
+                this.y = drawY; 
+                
+                if (snowmanImg.complete && snowmanImg.naturalWidth > 0) {
+                    const scaledW = this.w * squash;
+                    const scaledH = this.h * stretch;
+                    const offsetX = (this.w - scaledW) / 2;
+                    const offsetY = (this.h - scaledH); 
+                    ctx.drawImage(snowmanImg, drawX + offsetX, drawY + offsetY, scaledW, scaledH);
+                } else {
+                    ctx.fillRect(drawX, drawY, this.w, this.h);
+                }
+
+            } else if (this.type === 'santa') {
+                 if (santaImg.complete && santaImg.naturalWidth > 0) {
+                     ctx.save();
+                     const cx = this.x + this.w / 2;
+                     const cy = this.y + this.h / 2;
+                     ctx.translate(cx, cy);
+                     ctx.rotate(this.x * 0.015); 
+                     ctx.drawImage(santaImg, -this.w/2, -this.h/2, this.w, this.h);
+                     ctx.restore();
+                 } else {
+                    ctx.fillRect(this.x, this.y, this.w, this.h);
+                 }
+
+            } else if (this.type === 'elf' || this.type === 'reindeer') {
+                let stretch = 1.0 + (this.bounceFactor * 0.15); 
+                let squash = 1.0 - (this.bounceFactor * 0.1); 
+                if (this.bounceFactor < 0.2) { stretch = 0.85; squash = 1.15; }
+
+                const finalW = this.w * squash;
+                const finalH = this.h * stretch;
+                const cx = this.x + this.w / 2;
+                const cy = this.y + this.h; 
+
+                ctx.save();
+                ctx.translate(cx, cy);
+                ctx.scale(this.direction, 1);
+                
+                const img = (this.type === 'reindeer') ? reindeerImg : elfImg;
+                if (img.complete && img.naturalWidth > 0) {
+                     ctx.drawImage(img, -finalW/2, -finalH, finalW, finalH);
+                } else {
+                    ctx.fillRect(-finalW/2, -finalH, finalW, finalH);
+                }
+                ctx.restore();
+            }
+
+            if (this.isHit) {
+                ctx.restore(); 
+            }
+        }
+    }
+
+    // --- SYSTEM ---
+
+    function init() {
+        entities.length = 0;
+        particles.length = 0;
+        snowballs.length = 0;
+        
+        // --- Props Placement ---
+        
+        // 1. Wreath
+        entities.push(new Wreath());
+
+        // 2. Window Elements (New)
+        // Add Windows first (back)
+        const winCoords = [
+            {x: 1382, y: 255}, // TL
+            {x: 1612, y: 255}, // TR
+            {x: 1382, y: 432}, // BL
+            {x: 1610, y: 432}  // BR
+        ];
+        winCoords.forEach((pos, i) => {
+            entities.push(new WindowPane(windowImgs.normal[i], windowImgs.broken[i], pos.x, pos.y));
+        });
+
+        // Add Sill (Frame) on top of windows but behind other props
+        entities.push(new SimpleProp(sillImg, 1317, 232));
+
+        // 3. Frames (6)
+        const frameCoords = [
+            {x: 637, y: 436}, {x: 722, y: 421}, {x: 827, y: 468},
+            {x: 974, y: 459}, {x: 1095, y: 400}, {x: 1190, y: 473}
+        ];
+        frameCoords.forEach((pos, i) => {
+            entities.push(new SimpleProp(frameImgs[i], pos.x, pos.y, (x, y, w, h) => {
+                // Brown wood chips
+                for(let k=0; k<8; k++) particles.push(new Particle(x+w/2, y+h/2, '#8b4513', 10, 3));
+            }));
+        });
+
+        // 4. Socks (3)
+        const sockCoords = [
+            {x: 737, y: 517, c: '#ff0000'}, 
+            {x: 898, y: 519, c: '#00ff00'}, 
+            {x: 1073, y: 516, c: '#0000ff'}
+        ];
+        sockCoords.forEach((data, i) => {
+            entities.push(new SimpleProp(sockImgs[i], data.x, data.y, (x, y, w, h) => {
+                // Fluffy particles
+                for(let k=0; k<12; k++) particles.push(new Particle(x+w/2, y+h/2, data.c, 6, 6));
+            }));
+        });
+
+        // 5. Lights (10)
+        // 1,7=Yellow; 2,5,8=Green; 3,6,10=Red; 4,9=Turquoise
+        const lightColors = [
+            '#ffff00', '#00ff00', '#ff0000', '#40e0d0', '#00ff00', 
+            '#ff0000', '#ffff00', '#00ff00', '#40e0d0', '#ff0000'
+        ];
+        const lightCoords = [
+            {x: 610, y: 168}, {x: 711, y: 135}, {x: 807, y: 93}, {x: 911, y: 35}, {x: 1105, y: 51},
+            {x: 1226, y: 103}, {x: 1328, y: 156}, {x: 1432, y: 180}, {x: 1558, y: 170}, {x: 1686, y: 170}
+        ];
+        lightCoords.forEach((pos, i) => {
+            entities.push(new SimpleProp(lightImgs[i], pos.x, pos.y, (x, y, w, h) => {
+                // Glass shard explosion (fast)
+                for(let k=0; k<6; k++) particles.push(new Particle(x+w/2, y+h/2, lightColors[i], 20, 2));
+            }));
+        });
+
+        // Tree
+        entities.push(new Tree()); 
+        
+        // Gifts logic
+        let currentX = 101; 
+        const bottomY = 879;
+        
+        for(let i=0; i<5; i++) {
+            const g = new Gift(i, currentX, bottomY, giftImgs[i]);
+            entities.push(g);
+        }
+
+        const alignInterval = setInterval(() => {
+            let allLoaded = true;
+            let xPos = 101;
+            const gifts = entities.filter(e => e instanceof Gift);
+            
+            for (let g of gifts) {
+                if (g.w === 0) allLoaded = false;
+                g.x = xPos;
+                xPos += g.w; 
+            }
+            
+            if (allLoaded || state.time < 58) clearInterval(alignInterval);
+        }, 100);
+        
+        // Dog
+        entities.push(new Dog());
+        
+        // Bear
+        entities.push(new Bear());
+        
+        state.score = 0;
+        state.time = 60;
+        state.active = true;
+        updateUI();
+        document.getElementById('game-over').style.display = 'none';
+        
+        spawnLoop();
+        startTimer();
+        requestAnimationFrame(gameLoop);
+    }
+
+    function spawnLoop() {
+        if (!state.active) return;
+        
+        const r = Math.random();
+        
+        if (r > 0.95) {
+            spawnReindeerTrain(9);
+        } else if (r > 0.88) {
+            entities.push(new Enemy('santa'));
+        } else if (r > 0.55) {
+            entities.push(new Enemy('elf'));
+        } else {
+            entities.push(new Enemy('snowman'));
+        }
+
+        setTimeout(spawnLoop, Math.random() * 1500 + 500);
+    }
+
+    function spawnReindeerTrain(count) {
+        if (count <= 0) return;
+        let deer = new Enemy('reindeer');
+        deer.direction = 1; 
+        deer.x = -150; 
+        deer.y = 900; 
+        deer.baseY = 980; 
+        entities.push(deer);
+
+        setTimeout(() => spawnReindeerTrain(count - 1), 400); 
+    }
+
+    function checkCollision(impactX, impactY) {
+        const hitOrder = [...entities].sort((a,b) => b.getZ() - a.getZ());
+        
+        let hitSomething = false;
+
+        for (let ent of hitOrder) {
+            if (ent.checkHit(impactX, impactY)) {
+                ent.onHit();
+                ent.isHit = true;
+                ent.hitTimer = 5;
+                hitSomething = true;
+                break; 
+            }
+        }
+    }
+
+    function startTimer() {
+        const timerId = setInterval(() => {
+            if (!state.active) {
+                clearInterval(timerId);
+                return;
+            }
+            state.time--;
+            updateUI();
+            if (state.time <= 0) endGame();
+        }, 1000);
+    }
+
+    function endGame() {
+        state.active = false;
+        document.getElementById('final-score').innerText = state.score.toString().padStart(4, '0');
+        document.getElementById('game-over').style.display = 'block';
+    }
+
+    function updateUI() {
+        document.getElementById('score-display').innerText = state.score.toString().padStart(4, '0');
+        document.getElementById('time-display').innerText = state.time;
+    }
+
+    // --- INPUT (Scaled) ---
+
+    canvas.addEventListener('mousemove', e => {
+        const rect = canvas.getBoundingClientRect();
+        mouse.x = (e.clientX - rect.left) * (canvas.width / rect.width);
+        mouse.y = (e.clientY - rect.top) * (canvas.height / rect.height);
+    });
+
+    canvas.addEventListener('mousedown', () => {
+        if (!state.active) return;
+        snowballs.push(new Snowball(mouse.x, mouse.y));
+    });
+
+    function resetGame() {
+        init();
+    }
+
+    // --- RENDER ---
+
+    function gameLoop() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // Draw Background
+        if (bgImg.complete && bgImg.naturalWidth > 0) {
+            ctx.drawImage(bgImg, 0, 0, canvas.width, canvas.height);
+        } else {
+            ctx.fillStyle = '#65554a'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = '#3e2f26'; ctx.fillRect(0, canvas.height - 200, canvas.width, 200);
+        }
+
+        entities.sort((a, b) => a.getZ() - b.getZ());
+
+        for (let i = entities.length - 1; i >= 0; i--) {
+            let ent = entities[i];
+            ent.update();
+            ent.draw(ctx);
+            if (ent.markedForDeletion) entities.splice(i, 1);
+        }
+
+        for (let i = snowballs.length - 1; i >= 0; i--) {
+            let s = snowballs[i];
+            s.update();
+            s.draw(ctx);
+            if (s.markedForDeletion) snowballs.splice(i, 1);
+        }
+
+        for (let i = particles.length - 1; i >= 0; i--) {
+            let p = particles[i];
+            p.update();
+            p.draw(ctx);
+            if (p.life <= 0) particles.splice(i, 1);
+        }
+
+        // Crosshair
+        ctx.strokeStyle = '#ff0000';
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.arc(mouse.x, mouse.y, 40, 0, Math.PI*2);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(mouse.x - 50, mouse.y); ctx.lineTo(mouse.x + 50, mouse.y);
+        ctx.moveTo(mouse.x, mouse.y - 50); ctx.lineTo(mouse.x, mouse.y + 50);
+        ctx.stroke();
+        ctx.fillStyle = 'red'; ctx.fillRect(mouse.x - 2, mouse.y - 2, 4, 4);
+
+        requestAnimationFrame(gameLoop);
+    }
+
+    init();
+
+</script>
+</body>
+</html>
