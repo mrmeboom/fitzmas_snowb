@@ -21,11 +21,11 @@
 
         #game-container {
             position: relative;
-            /* Responsive Scaling Logic */
+            /* 1974x1168 Aspect Ratio */
             width: 95vw;
             height: auto;
-            aspect-ratio: 16/9;
-            max-height: 95vh; /* Prevent it from getting too tall */
+            aspect-ratio: 1974/1168;
+            max-height: 95vh; 
             
             box-shadow: 0 0 50px rgba(0,0,0,0.9);
             border: 4px solid #333;
@@ -35,7 +35,7 @@
             display: block;
             width: 100%;
             height: 100%;
-            background-color: #2a1d15; /* Fallback color if BG fails */
+            background-color: #2a1d15;
             image-rendering: pixelated;
             cursor: none; 
         }
@@ -122,8 +122,7 @@
 <body>
 
 <div id="game-container">
-    <!-- Updated Resolution to 1920x1080 -->
-    <canvas id="gameCanvas" width="1920" height="1080"></canvas>
+    <canvas id="gameCanvas" width="1974" height="1168"></canvas>
     <div class="scanlines"></div>
     
     <div id="ui-layer">
@@ -151,7 +150,7 @@
     
     // --- ASSETS ---
     const bgImg = new Image();
-    bgImg.src = 'https://i.imgur.com/ItZx3i7.png'; // New BG with empty fireplace
+    bgImg.src = 'https://i.imgur.com/yWuMU6w.png';
 
     const snowmanImg = new Image();
     snowmanImg.src = 'https://i.imgur.com/dTTOgiV.png';
@@ -187,7 +186,6 @@
     const fireImg = new Image();
     fireImg.src = 'https://i.imgur.com/JtpFA54.png';
 
-    // Helper to load arrays of images
     const loadImages = (urls) => urls.map(src => {
         const img = new Image();
         img.src = src;
@@ -232,21 +230,20 @@
 
     const windowImgs = {
         normal: loadImages([
-            'https://i.imgur.com/nPvNZZQ.png', // TL
-            'https://i.imgur.com/U7rdB4u.png', // TR
-            'https://i.imgur.com/WLeB2rG.png', // BL
-            'https://i.imgur.com/hL4DfE2.png'  // BR
+            'https://i.imgur.com/nPvNZZQ.png', 
+            'https://i.imgur.com/U7rdB4u.png', 
+            'https://i.imgur.com/WLeB2rG.png', 
+            'https://i.imgur.com/hL4DfE2.png'  
         ]),
         broken: loadImages([
-            'https://i.imgur.com/xXwbOdk.png', // TL
-            'https://i.imgur.com/fXLheVS.png', // TR
-            'https://i.imgur.com/1G8g2eQ.png', // BL
-            'https://i.imgur.com/VCth7xd.png'  // BR
+            'https://i.imgur.com/xXwbOdk.png', 
+            'https://i.imgur.com/fXLheVS.png', 
+            'https://i.imgur.com/1G8g2eQ.png', 
+            'https://i.imgur.com/VCth7xd.png'  
         ])
     };
 
-    // Global Scaling Factor (1920 / 800 = ~2.4)
-    const SCALE = 2.4; 
+    const SCALE = 2.45; 
 
     let state = {
         score: 0,
@@ -257,12 +254,9 @@
 
     const mouse = { x: 0, y: 0 };
 
-    // Lists
     const entities = [];
     const particles = [];
     const snowballs = [];
-
-    // --- CLASSES ---
 
     class Particle {
         constructor(x, y, color, speed = 15, size = 4) {
@@ -294,18 +288,17 @@
             this.startY = canvas.height;
             this.x = this.startX;
             this.y = this.startY;
-            
             this.targetX = targetX;
             this.targetY = targetY;
-            
             this.speed = 0.05;
             this.progress = 0;
             this.markedForDeletion = false;
+            // Snowballs are on top layer
+            this.layer = 100;
         }
 
         update() {
             this.progress += this.speed;
-            
             this.x = this.startX + (this.targetX - this.startX) * this.progress;
             this.y = this.startY + (this.targetY - this.startY) * this.progress;
 
@@ -327,7 +320,6 @@
         draw(ctx) {
             const scale = 1.0 - (this.progress * 0.5); 
             const size = (15 * SCALE) * scale;
-
             ctx.fillStyle = '#fff';
             ctx.beginPath();
             ctx.arc(this.x, this.y, size, 0, Math.PI * 2);
@@ -336,21 +328,19 @@
     }
 
     class Entity {
-        constructor(x, y, w, h) {
+        constructor(x, y, layer = 0) {
             this.x = x;
             this.y = y;
-            this.w = w;
-            this.h = h;
+            this.w = 0;
+            this.h = 0;
+            this.layer = layer; 
             this.markedForDeletion = false;
             this.isHit = false; 
             this.hitTimer = 0;
-            // Default Z for basic props. Can be overridden.
-            // Items "on wall" are far back (low Z).
-            this.zOffset = 0; 
         }
 
         getZ() {
-            return this.y + this.h + this.zOffset;
+            return this.y + this.h;
         }
 
         draw(ctx) {
@@ -376,8 +366,8 @@
     // --- PROPS ---
 
     class SimpleProp extends Entity {
-        constructor(img, x, y, onHitCallback) {
-            super(x, y, 0, 0); 
+        constructor(img, x, y, layer, onHitCallback) {
+            super(x, y, layer); 
             this.img = img;
             this.onHitCallback = onHitCallback;
             this.initialized = false;
@@ -393,7 +383,7 @@
         }
 
         onHit() {
-            if (!this.onHitCallback) return; // Static props logic
+            if (!this.onHitCallback) return; 
             this.markedForDeletion = true; 
             state.score += 15;
             updateUI();
@@ -409,12 +399,11 @@
     
     class Fire extends Entity {
         constructor() {
-            super(913, 620, 0, 0); // Placeholder
+            // Layer 2: Inside Wall
+            super(913, 620, 2); 
             this.img = fireImg;
             this.initialized = false;
             this.dying = false;
-            // Fire is inside the fireplace, behind floor objects
-            this.zOffset = -50; 
         }
 
         update() {
@@ -422,7 +411,6 @@
             if (!this.initialized && this.img.complete && this.img.naturalWidth > 0) {
                 this.w = this.img.naturalWidth * SCALE * 0.5;
                 this.h = this.img.naturalHeight * SCALE * 0.5;
-                // Center roughly based on mantle center ~913
                 this.x = 913 - (this.w / 2);
                 this.y = 620; 
                 this.initialized = true;
@@ -430,7 +418,6 @@
 
             if (this.dying && this.hitTimer <= 0) {
                 this.markedForDeletion = true;
-                // Grey smoke particles
                  for(let k=0; k<12; k++) particles.push(new Particle(this.x+this.w/2, this.y+this.h/2, '#555555', 6, 6));
             }
         }
@@ -440,7 +427,7 @@
             state.score += 15;
             updateUI();
             this.isHit = true;
-            this.hitTimer = 10; // Glow for 10 frames
+            this.hitTimer = 10; 
             this.dying = true;
         }
 
@@ -457,13 +444,12 @@
     
     class WindowPane extends Entity {
         constructor(normalImg, brokenImg, x, y) {
-            super(x, y, 0, 0);
+            // Layer 2: Inside Wall (Same as Fire)
+            super(x, y, 2);
             this.normalImg = normalImg;
             this.brokenImg = brokenImg;
             this.isBroken = false;
             this.initialized = false;
-            // Windows are behind the sill
-            this.zOffset = -50; 
         }
         
         update() {
@@ -480,7 +466,6 @@
                 this.isBroken = true;
                 state.score += 15;
                 updateUI();
-                // Glass shards
                 for(let k=0; k<15; k++) particles.push(new Particle(this.x+this.w/2, this.y+this.h/2, '#a8e6cf', 12, 3));
             }
         }
@@ -496,7 +481,8 @@
     
     class Wreath extends Entity {
          constructor() {
-            super(830, 146, 0, 0); 
+            // Layer 3: On Wall
+            super(830, 146, 3); 
             this.img = wreathImg;
             this.initialized = false;
             this.shakeOffset = 0;
@@ -529,7 +515,6 @@
 
         draw(ctx) {
             if (!this.initialized) return;
-            
             ctx.save();
             ctx.translate(this.shakeOffset, 0);
             if (this.isHit) {
@@ -542,10 +527,10 @@
 
     class Tree extends Entity {
         constructor() {
-            super(116, 847 - 100, 100, 100); 
+            // Layer 0: Furthest Back
+            super(116, 233, 0); 
             this.shakeOffset = 0;
             this.hasGivenPoints = false;
-            this.targetBottomY = 1080 - 233; // 847
         }
 
         update() {
@@ -554,11 +539,9 @@
                 this.shakeOffset = -this.shakeOffset * 0.8;
                 if (Math.abs(this.shakeOffset) < 1) this.shakeOffset = 0;
             }
-            
             if (treeImg.complete && treeImg.naturalWidth > 0) {
                 this.w = treeImg.naturalWidth * SCALE * 0.5;
                 this.h = treeImg.naturalHeight * SCALE * 0.5;
-                this.y = this.targetBottomY - this.h;
             }
         }
 
@@ -581,21 +564,20 @@
         draw(ctx) {
             ctx.save();
             ctx.translate(this.shakeOffset, 0);
-            
             if (treeImg.complete && treeImg.naturalWidth > 0) {
                 ctx.drawImage(treeImg, this.x, this.y, this.w, this.h);
             } else {
                 ctx.fillStyle = '#0f441e';
                 ctx.fillRect(this.x, this.y, 200, 400);
             }
-
             ctx.restore();
         }
     }
 
     class Gift extends Entity {
         constructor(index, startX, bottomY, img) {
-            super(startX, 0, 0, 0); 
+            // Layer 1: In front of Tree
+            super(startX, 0, 1); 
             this.index = index;
             this.bottomY = bottomY;
             this.img = img;
@@ -617,11 +599,9 @@
             state.score += 15;
             updateUI();
             this.markedForDeletion = true;
-            
             const gridSize = 6;
             const cols = this.w / gridSize;
             const rows = this.h / gridSize;
-            
             for(let r=0; r<rows; r+=2) {
                 for(let c=0; c<cols; c+=2) {
                     particles.push(new Particle(
@@ -643,7 +623,8 @@
 
     class Bear extends Entity {
         constructor() {
-            super(1700, 900, 100, 100); 
+            // Layer 7 (Floor Prop)
+            super(1700, 900, 7); 
             this.alive = true;
             this.shakeOffset = 0;
             this.targetX1 = 1760;
@@ -658,7 +639,6 @@
                 this.shakeOffset = -this.shakeOffset * 0.8;
                 if (Math.abs(this.shakeOffset) < 1) this.shakeOffset = 0;
             }
-
             let img = this.alive ? bearAliveImg : bearDeadImg;
             if (img.complete && img.naturalWidth > 0) {
                 this.w = img.naturalWidth * SCALE * 0.5; 
@@ -700,7 +680,8 @@
 
     class Dog extends Entity {
         constructor() {
-            super(1300, 1000, 100, 50);
+            // Layer 7 (Floor Prop)
+            super(1300, 1000, 7);
             this.state = 'sleeping'; 
             this.wakeTimer = 0;
             this.hasGivenPoints = false;
@@ -716,7 +697,6 @@
                 this.wakeTimer--;
                 if (this.wakeTimer <= 0) this.state = 'sleeping';
             }
-
             let img = this.state === 'sleeping' ? dogSleepImg : dogAwakeImg;
             if (img.complete && img.naturalWidth > 0) {
                 this.w = img.naturalWidth * SCALE * 0.5; 
@@ -758,35 +738,34 @@
         }
     }
 
-    // --- ENEMIES ---
-
     class Enemy extends Entity {
         constructor(type) {
-            super(-400, 0, 0, 0); 
+            // Layer 8 (Foreground)
+            super(-400, 0, 8); 
             this.type = type;
             this.direction = Math.random() > 0.5 ? 1 : -1;
-            this.baseY = 850 + Math.random() * 200; 
+            this.baseY = 900 + Math.random() * 200; 
             this.hopPhase = Math.random() * Math.PI * 2;
             
             if (type === 'snowman') {
-                this.w = 160 * 2.4; this.h = 280 * 2.4;
-                this.speed = (Math.random() * 1.5 + 0.5) * 1.5; 
+                this.w = 160 * SCALE; this.h = 280 * SCALE;
+                this.speed = (Math.random() * 1.5 + 0.5) * SCALE * 0.6; 
                 this.scoreVal = 100;
                 this.color = '#fff';
             } else if (type === 'elf') {
-                this.w = 50 * 2.4; this.h = 80 * 2.4;
-                this.speed = (Math.random() * 1.5 + 1.5) * 1.5; 
+                this.w = 50 * SCALE; this.h = 80 * SCALE;
+                this.speed = (Math.random() * 1.5 + 1.5) * SCALE * 0.6; 
                 this.scoreVal = 200;
                 this.color = '#52b748';
                 this.bounceOffset = 0;
             } else if (type === 'santa') {
-                this.w = 240 * 2.4; this.h = 240 * 2.4;
-                this.speed = 3.6 * 1.5; 
+                this.w = 240 * SCALE; this.h = 240 * SCALE;
+                this.speed = 3.6 * SCALE * 0.6; 
                 this.scoreVal = 1000;
                 this.color = '#d32f2f';
             } else if (type === 'reindeer') {
-                this.w = 60 * 2.4; this.h = 60 * 2.4; 
-                this.speed = 2 * 1.5;
+                this.w = 60 * SCALE; this.h = 60 * SCALE; 
+                this.speed = 2 * SCALE * 0.6;
                 this.scoreVal = 50;
                 this.color = '#8B4513';
                 this.bounceOffset = 0;
@@ -833,7 +812,6 @@
         }
 
         draw(ctx) {
-            
             if (this.isHit) {
                 ctx.save();
                 ctx.filter = 'sepia(1) saturate(100) hue-rotate(-50deg) contrast(2)';
@@ -845,10 +823,8 @@
                 const hopCycle = Math.sin((Date.now() / 400) + this.hopPhase); 
                 const absHop = Math.abs(hopCycle); 
                 const jumpHeight = (20 * SCALE) * absHop;
-                
                 let stretch = 1.0 + (absHop * 0.2);
                 let squash = 1.0 - (absHop * 0.1); 
-                
                 if (absHop < 0.2) { stretch = 0.9; squash = 1.1; }
 
                 const drawX = this.x;
@@ -907,63 +883,80 @@
         }
     }
 
-    // --- SYSTEM ---
-
     function init() {
         entities.length = 0;
         particles.length = 0;
         snowballs.length = 0;
         
-        // --- Props Placement ---
-        
-        // 0. Fire (Behind everything on wall)
-        entities.push(new Fire());
-        
-        // 1. Wreath
-        entities.push(new Wreath());
+        // --- Props Placement (Fixed Layering) ---
+        // 0: Tree
+        // 1: Gifts
+        // 2: Fire, Windows
+        // 3: Sill, Wreath
+        // 4: Frames
+        // 5: Socks
+        // 6: Lights
+        // 7: Dog, Bear
+        // 8: Enemies
 
-        // 2. Window Elements (New)
-        // Add Windows first (back)
+        // Layer 0: Tree
+        entities.push(new Tree()); 
+
+        // Layer 1: Gifts
+        let currentX = 101; 
+        const bottomY = 879;
+        for(let i=0; i<5; i++) {
+            entities.push(new Gift(i, currentX, bottomY, giftImgs[i]));
+        }
+        const alignInterval = setInterval(() => {
+            let allLoaded = true;
+            let xPos = 101;
+            const gifts = entities.filter(e => e instanceof Gift);
+            for (let g of gifts) {
+                if (g.w === 0) allLoaded = false;
+                g.x = xPos;
+                xPos += g.w; 
+            }
+            if (allLoaded || state.time < 58) clearInterval(alignInterval);
+        }, 100);
+
+        // Layer 2: Fire, Windows
+        entities.push(new Fire());
         const winCoords = [
-            {x: 1382, y: 255}, // TL
-            {x: 1612, y: 255}, // TR
-            {x: 1382, y: 432}, // BL
-            {x: 1610, y: 432}  // BR
+            {x: 1382, y: 255}, {x: 1612, y: 255}, {x: 1382, y: 432}, {x: 1610, y: 432}
         ];
         winCoords.forEach((pos, i) => {
-            entities.push(new WindowPane(windowImgs.normal[i], windowImgs.broken[i], pos.x, pos.y));
+            entities.push(new WindowPane(windowImgs.normal[i], windowImgs.broken[i], pos.x, pos.y)); 
         });
 
-        // Add Sill (Frame) on top of windows but behind other props
-        entities.push(new SimpleProp(sillImg, 1317, 232));
+        // Layer 3: Sill, Wreath
+        entities.push(new SimpleProp(sillImg, 1317, 232, 3));
+        entities.push(new Wreath());
 
-        // 3. Frames (6)
+        // Layer 4: Frames
         const frameCoords = [
             {x: 637, y: 436}, {x: 722, y: 421}, {x: 827, y: 468},
             {x: 974, y: 459}, {x: 1095, y: 400}, {x: 1190, y: 473}
         ];
         frameCoords.forEach((pos, i) => {
-            entities.push(new SimpleProp(frameImgs[i], pos.x, pos.y, (x, y, w, h) => {
-                // Brown wood chips
+            entities.push(new SimpleProp(frameImgs[i], pos.x, pos.y, 4, (x, y, w, h) => {
                 for(let k=0; k<8; k++) particles.push(new Particle(x+w/2, y+h/2, '#8b4513', 10, 3));
             }));
         });
 
-        // 4. Socks (3)
+        // Layer 5: Socks
         const sockCoords = [
             {x: 737, y: 517, c: '#ff0000'}, 
             {x: 898, y: 519, c: '#00ff00'}, 
             {x: 1073, y: 516, c: '#0000ff'}
         ];
         sockCoords.forEach((data, i) => {
-            entities.push(new SimpleProp(sockImgs[i], data.x, data.y, (x, y, w, h) => {
-                // Fluffy particles
+            entities.push(new SimpleProp(sockImgs[i], data.x, data.y, 5, (x, y, w, h) => {
                 for(let k=0; k<12; k++) particles.push(new Particle(x+w/2, y+h/2, data.c, 6, 6));
             }));
         });
 
-        // 5. Lights (10)
-        // 1,7=Yellow; 2,5,8=Green; 3,6,10=Red; 4,9=Turquoise
+        // Layer 6: Lights
         const lightColors = [
             '#ffff00', '#00ff00', '#ff0000', '#40e0d0', '#00ff00', 
             '#ff0000', '#ffff00', '#00ff00', '#40e0d0', '#ff0000'
@@ -973,42 +966,13 @@
             {x: 1226, y: 103}, {x: 1328, y: 156}, {x: 1432, y: 180}, {x: 1558, y: 170}, {x: 1686, y: 170}
         ];
         lightCoords.forEach((pos, i) => {
-            entities.push(new SimpleProp(lightImgs[i], pos.x, pos.y, (x, y, w, h) => {
-                // Glass shard explosion (fast)
+            entities.push(new SimpleProp(lightImgs[i], pos.x, pos.y, 6, (x, y, w, h) => {
                 for(let k=0; k<6; k++) particles.push(new Particle(x+w/2, y+h/2, lightColors[i], 20, 2));
             }));
         });
 
-        // Tree
-        entities.push(new Tree()); 
-        
-        // Gifts logic
-        let currentX = 101; 
-        const bottomY = 879;
-        
-        for(let i=0; i<5; i++) {
-            const g = new Gift(i, currentX, bottomY, giftImgs[i]);
-            entities.push(g);
-        }
-
-        const alignInterval = setInterval(() => {
-            let allLoaded = true;
-            let xPos = 101;
-            const gifts = entities.filter(e => e instanceof Gift);
-            
-            for (let g of gifts) {
-                if (g.w === 0) allLoaded = false;
-                g.x = xPos;
-                xPos += g.w; 
-            }
-            
-            if (allLoaded || state.time < 58) clearInterval(alignInterval);
-        }, 100);
-        
-        // Dog
+        // Layer 7: Dog, Bear
         entities.push(new Dog());
-        
-        // Bear
         entities.push(new Bear());
         
         state.score = 0;
@@ -1053,7 +1017,11 @@
     }
 
     function checkCollision(impactX, impactY) {
-        const hitOrder = [...entities].sort((a,b) => b.getZ() - a.getZ());
+        // Sort entities by Layer DESCENDING (Hit front items first)
+        const hitOrder = [...entities].sort((a,b) => {
+            if (b.layer !== a.layer) return b.layer - a.layer;
+            return b.getZ() - a.getZ();
+        });
         
         let hitSomething = false;
 
@@ -1091,8 +1059,6 @@
         document.getElementById('time-display').innerText = state.time;
     }
 
-    // --- INPUT (Scaled) ---
-
     canvas.addEventListener('mousemove', e => {
         const rect = canvas.getBoundingClientRect();
         mouse.x = (e.clientX - rect.left) * (canvas.width / rect.width);
@@ -1108,8 +1074,6 @@
         init();
     }
 
-    // --- RENDER ---
-
     function gameLoop() {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -1121,13 +1085,22 @@
             ctx.fillStyle = '#3e2f26'; ctx.fillRect(0, canvas.height - 200, canvas.width, 200);
         }
 
-        entities.sort((a, b) => a.getZ() - b.getZ());
-
+        // UPDATE LOOP (Backwards for splice safety)
         for (let i = entities.length - 1; i >= 0; i--) {
             let ent = entities[i];
             ent.update();
-            ent.draw(ctx);
             if (ent.markedForDeletion) entities.splice(i, 1);
+        }
+
+        // DRAW LOOP (Separate pass for correct Z-Ordering)
+        // Sort Ascending (0..8)
+        entities.sort((a, b) => {
+            if (a.layer !== b.layer) return a.layer - b.layer;
+            return a.getZ() - b.getZ();
+        });
+
+        for (let ent of entities) {
+            ent.draw(ctx);
         }
 
         for (let i = snowballs.length - 1; i >= 0; i--) {
