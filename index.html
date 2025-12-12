@@ -21,7 +21,6 @@
 
         #game-container {
             position: relative;
-            /* 1974x1168 Aspect Ratio */
             width: 95vw;
             height: auto;
             aspect-ratio: 1974/1168;
@@ -72,34 +71,6 @@
             color: #ffd700;
         }
 
-        #game-over {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background: rgba(0, 0, 0, 0.9);
-            padding: 60px;
-            text-align: center;
-            border: 6px solid white;
-            display: none;
-            z-index: 100;
-        }
-        
-        button {
-            background: #ff0044;
-            color: white;
-            border: 4px solid white;
-            padding: 20px 40px;
-            font-family: 'Press Start 2P', cursive;
-            font-size: 24px;
-            cursor: pointer;
-            margin-top: 30px;
-        }
-        
-        button:hover {
-            background: #cc0033;
-        }
-        
         .scanlines {
             position: absolute;
             top: 0;
@@ -135,13 +106,6 @@
             <span class="value" id="time-display">60</span>
         </div>
     </div>
-
-    <div id="game-over">
-        <h1 style="color: #ff4444; margin-top: 0; font-size: 48px;">TIME'S UP!</h1>
-        <p style="font-size: 24px;">FINAL SCORE</p>
-        <p class="value" id="final-score" style="font-size: 60px; margin: 20px 0;">0</p>
-        <button onclick="resetGame()">PLAY AGAIN</button>
-    </div>
 </div>
 
 <script>
@@ -151,6 +115,20 @@
     // --- ASSETS ---
     const bgImg = new Image();
     bgImg.src = 'https://i.imgur.com/ItZx3i7.png';
+
+    const logoImg = new Image();
+    logoImg.src = 'https://i.imgur.com/b0AD4hY.png';
+
+    const crosshairImg = new Image();
+    crosshairImg.src = 'https://i.imgur.com/JrtG9Ll.png';
+
+    // UI Icons
+    const iconHighscore = new Image();
+    iconHighscore.src = 'https://i.imgur.com/BB2Cysw.png';
+    const iconRetry = new Image();
+    iconRetry.src = 'https://i.imgur.com/t2FzJ6S.png';
+    const iconMenu = new Image();
+    iconMenu.src = 'https://i.imgur.com/NeJWcts.png';
 
     const snowmanImg = new Image();
     snowmanImg.src = 'https://i.imgur.com/ZUjWUMA.png';
@@ -243,7 +221,6 @@
         ])
     };
 
-    // Hit Filters for Enemies (Red, Green, Pink, Turquoise, Blue, Yellow)
     const HIT_FILTERS = [
         'sepia(1) saturate(100) hue-rotate(-50deg) contrast(2)',   // Red
         'sepia(1) saturate(100) hue-rotate(60deg) contrast(2)',    // Green
@@ -253,20 +230,34 @@
         'sepia(1) saturate(100) hue-rotate(0deg) contrast(2)'      // Yellow
     ];
 
-    const FX_SCALE = 2.5; 
+    const FX_SCALE = 2.5;
+    const SCALE = 2.45; 
+
+    // STATE MANAGEMENT
+    const STATES = {
+        MENU: 'menu',
+        PLAYING: 'playing',
+        GAMEOVER: 'gameover',
+        HIGHSCORE: 'highscore'
+    };
 
     let state = {
+        current: STATES.MENU,
         score: 0,
         time: 60,
-        active: true,
-        shake: 0
+        shake: 0,
+        highscores: [], // {rank: 1, score: 100, name: 'AAA'}
+        enteringInitials: false,
+        playerInitials: ''
     };
 
     const mouse = { x: 0, y: 0 };
 
-    const entities = [];
+    let entities = [];
     const particles = [];
     const snowballs = [];
+
+    // --- CLASSES ---
 
     class Particle {
         constructor(x, y, color, speed = 15, size = 4) {
@@ -303,7 +294,6 @@
             this.speed = 0.05;
             this.progress = 0;
             this.markedForDeletion = false;
-            // Snowballs are on top layer
             this.layer = 100;
         }
 
@@ -347,7 +337,7 @@
             this.markedForDeletion = false;
             this.isHit = false; 
             this.hitTimer = 0;
-            this.collidable = true; // New property for hitbox logic
+            this.collidable = true; 
         }
 
         getZ() {
@@ -374,6 +364,105 @@
         onHit() { }
     }
 
+    // --- UI ENTITIES (Buttons) ---
+    class ButtonTarget extends Entity {
+        constructor(x, y, text, action) {
+            super(x, y, 100); 
+            this.text = text;
+            this.action = action;
+            this.w = 600; 
+            this.h = 100;
+            this.x = x - this.w/2; 
+        }
+
+        draw(ctx) {
+            ctx.save();
+            
+            if (this.isHit) {
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(this.x, this.y, this.w, this.h);
+            } 
+            
+            ctx.fillStyle = this.isHit ? '#ff0044' : '#ffd700'; 
+            ctx.font = '50px "Press Start 2P"'; 
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            
+            if (!this.isHit) {
+                ctx.shadowColor = "black";
+                ctx.shadowBlur = 0;
+                ctx.shadowOffsetX = 3;
+                ctx.shadowOffsetY = 3;
+            }
+            
+            ctx.fillText(this.text, this.x + this.w/2, this.y + this.h/2);
+
+            ctx.restore();
+        }
+
+        onHit() {
+            this.isHit = true;
+            this.hitTimer = 5;
+            for(let i=0; i<20; i++) particles.push(new Particle(this.x + this.w/2, this.y + this.h/2, '#ffd700', 20));
+            setTimeout(() => {
+                this.markedForDeletion = true;
+                this.action();
+            }, 200);
+        }
+    }
+
+    class ImageButtonTarget extends Entity {
+        constructor(x, y, img, action) {
+            super(x, y, 100);
+            this.img = img;
+            this.action = action;
+            this.w = 120; // Assume manageable size, will update on load
+            this.h = 120;
+            this.x = x - this.w/2;
+            this.initialized = false;
+        }
+
+        update() {
+            super.update();
+            if (!this.initialized && this.img.complete && this.img.naturalWidth > 0) {
+                // Use natural size or scale a bit if needed
+                // For icons, let's keep them reasonable. 
+                // Assuming the pngs are sized for the game (~100-150px)
+                this.w = this.img.naturalWidth;
+                this.h = this.img.naturalHeight;
+                this.x = this.x + 60 - this.w/2; // Re-center based on new width
+                this.initialized = true;
+            }
+        }
+
+        draw(ctx) {
+            if (!this.initialized) return;
+            ctx.save();
+            if (this.isHit) {
+                ctx.filter = 'brightness(100) sepia(1) hue-rotate(-50deg) saturate(5)'; // Red flash
+            }
+            // Add shadow
+            if (!this.isHit) {
+                ctx.shadowColor = "black";
+                ctx.shadowBlur = 0;
+                ctx.shadowOffsetX = 5;
+                ctx.shadowOffsetY = 5;
+            }
+            ctx.drawImage(this.img, this.x, this.y, this.w, this.h);
+            ctx.restore();
+        }
+
+        onHit() {
+            this.isHit = true;
+            this.hitTimer = 5;
+            for(let i=0; i<20; i++) particles.push(new Particle(this.x + this.w/2, this.y + this.h/2, '#ffffff', 15));
+            setTimeout(() => {
+                this.markedForDeletion = true;
+                this.action();
+            }, 200);
+        }
+    }
+
     // --- PROPS ---
 
     class SimpleProp extends Entity {
@@ -387,7 +476,6 @@
         update() {
             super.update();
             if (!this.initialized && this.img.complete && this.img.naturalWidth > 0) {
-                // NO SCALING - Use natural size
                 this.w = this.img.naturalWidth;
                 this.h = this.img.naturalHeight;
                 this.initialized = true;
@@ -409,80 +497,8 @@
         }
     }
     
-    // --- SPECIAL FX ENTITIES ---
-
-    class SnowTank extends Entity {
-        constructor() {
-            // Layer 2.5: Between Windows (2) and Sill (3)
-            // Coordinates provided: TL: 1375, 245 | BR: 1828, 582
-            const x = 1375;
-            const y = 245;
-            const w = 1828 - 1375; // 453
-            const h = 582 - 245;   // 337
-            
-            super(x, y, 2.5);
-            this.w = w;
-            this.h = h;
-            this.collidable = false; // Snowballs pass through
-            
-            this.flakes = [];
-            // Pre-populate snow
-            for(let i=0; i<100; i++) {
-                this.flakes.push(this.createFlake(true));
-            }
-        }
-
-        createFlake(randomY = false) {
-            return {
-                x: Math.random() * this.w,
-                y: randomY ? Math.random() * this.h : -10, // Start above or random
-                size: (Math.random() * 2 + 1) * FX_SCALE,
-                speed: (Math.random() * 1 + 0.5) * FX_SCALE * 0.5,
-                swayOffset: Math.random() * Math.PI * 2,
-                swaySpeed: (Math.random() * 0.02 + 0.01)
-            };
-        }
-
-        update() {
-            // No hit logic needed
-            const time = Date.now();
-            
-            for (let f of this.flakes) {
-                f.y += f.speed;
-                // Wind logic: Sine wave + slight constant right drift
-                f.x += Math.sin(time * 0.002 + f.swayOffset) * 0.5 + 0.2;
-
-                // Wrap around
-                if (f.y > this.h) {
-                    f.y = -10;
-                    f.x = Math.random() * this.w;
-                }
-            }
-        }
-
-        draw(ctx) {
-            ctx.save();
-            
-            // 1. Define Clipping Region (The Tank)
-            ctx.beginPath();
-            ctx.rect(this.x, this.y, this.w, this.h);
-            ctx.clip(); // Only draw pixels inside this rect
-
-            // 2. Draw Snowflakes
-            ctx.fillStyle = '#ffffff';
-            for (let f of this.flakes) {
-                // Draw relative to Tank position
-                ctx.fillRect(this.x + f.x, this.y + f.y, f.size, f.size);
-            }
-
-            ctx.restore();
-        }
-    }
-    
     class Fire extends Entity {
         constructor() {
-            // Layer 2: Inside Wall
-            // Updated coords: 832, 657 (Top-Left)
             super(832, 657, 2); 
             this.img = fireImg;
             this.initialized = false;
@@ -494,11 +510,9 @@
             if (!this.initialized && this.img.complete && this.img.naturalWidth > 0) {
                 this.w = this.img.naturalWidth;
                 this.h = this.img.naturalHeight;
-                // Use constructor coords (832, 657), don't override with centering logic
                 this.initialized = true;
             }
 
-            // Wait for hit flash to finish before deleting
             if (this.dying && this.hitTimer <= 0) {
                 this.markedForDeletion = true;
                  for(let k=0; k<12; k++) particles.push(new Particle(this.x+this.w/2, this.y+this.h/2, '#555555', 6, 6));
@@ -511,7 +525,7 @@
             updateUI();
             
             this.isHit = true;
-            this.hitTimer = 6; // Show flash for 6 frames (approx 0.1s)
+            this.hitTimer = 6; 
             this.dying = true;
         }
 
@@ -521,11 +535,9 @@
             ctx.save();
             
             if (this.isHit) {
-                 // Force Yellow Flash
                  ctx.filter = 'sepia(1) saturate(100) hue-rotate(0deg) contrast(2)';
             }
 
-            // Raster Wiggle Effect
             const time = Date.now() / 150; 
             const sliceHeight = 2; 
             
@@ -546,7 +558,6 @@
     
     class WindowPane extends Entity {
         constructor(normalImg, brokenImg, x, y) {
-            // Layer 2: Inside Wall (Same as Fire)
             super(x, y, 2);
             this.normalImg = normalImg;
             this.brokenImg = brokenImg;
@@ -583,7 +594,6 @@
     
     class Wreath extends Entity {
          constructor() {
-            // Layer 3: On Wall
             super(830, 146, 3); 
             this.img = wreathImg;
             this.initialized = false;
@@ -628,9 +638,66 @@
         }
     }
 
+    class SnowTank extends Entity {
+        constructor() {
+            const x = 1375;
+            const y = 245;
+            const w = 1828 - 1375; 
+            const h = 582 - 245;   
+            
+            super(x, y, 2.5);
+            this.w = w;
+            this.h = h;
+            this.collidable = false; 
+            
+            this.flakes = [];
+            for(let i=0; i<100; i++) {
+                this.flakes.push(this.createFlake(true));
+            }
+        }
+
+        createFlake(randomY = false) {
+            return {
+                x: Math.random() * this.w,
+                y: randomY ? Math.random() * this.h : -10, 
+                size: (Math.random() * 2 + 1) * FX_SCALE,
+                speed: (Math.random() * 1 + 0.5) * FX_SCALE * 0.5,
+                swayOffset: Math.random() * Math.PI * 2,
+                swaySpeed: (Math.random() * 0.02 + 0.01)
+            };
+        }
+
+        update() {
+            const time = Date.now();
+            
+            for (let f of this.flakes) {
+                f.y += f.speed;
+                f.x += Math.sin(time * 0.002 + f.swayOffset) * 0.5 + 0.2;
+
+                if (f.y > this.h) {
+                    f.y = -10;
+                    f.x = Math.random() * this.w;
+                }
+            }
+        }
+
+        draw(ctx) {
+            ctx.save();
+            ctx.beginPath();
+            ctx.rect(this.x, this.y, this.w, this.h);
+            ctx.clip(); 
+
+            ctx.fillStyle = '#ffffff';
+            for (let f of this.flakes) {
+                ctx.fillRect(this.x + f.x, this.y + f.y, f.size, f.size);
+            }
+
+            ctx.restore();
+        }
+    }
+
     class Tree extends Entity {
         constructor() {
-            // Layer 0: Furthest Back
             super(116, 233, 0); 
             this.shakeOffset = 0;
             this.hasGivenPoints = false;
@@ -679,7 +746,6 @@
 
     class Gift extends Entity {
         constructor(index, startX, topY, img) {
-            // Layer 1: In front of Tree
             super(startX, 0, 1); 
             this.index = index;
             this.topY = topY;
@@ -693,7 +759,6 @@
             if (!this.initialized && this.img.complete && this.img.naturalWidth > 0) {
                 this.w = this.img.naturalWidth;
                 this.h = this.img.naturalHeight;
-                // Align Top-Left
                 this.y = this.topY;
                 this.initialized = true;
             }
@@ -727,7 +792,6 @@
 
     class Bear extends Entity {
         constructor() {
-            // Layer 7 (Floor Prop)
             super(1700, 900, 7); 
             this.alive = true;
             this.shakeOffset = 0;
@@ -787,7 +851,6 @@
 
     class Dog extends Entity {
         constructor() {
-            // Layer 7 (Floor Prop)
             super(1300, 1000, 7);
             this.state = 'sleeping'; 
             this.wakeTimer = 0;
@@ -847,18 +910,15 @@
 
     class Enemy extends Entity {
         constructor(type) {
-            // Layer 8 (Foreground)
             super(-400, 0, 8); 
             this.type = type;
             this.direction = Math.random() > 0.5 ? 1 : -1;
-            
-            // Adjust spawn Y to floor range
             this.baseY = 900 + Math.random() * 200; 
             this.hopPhase = Math.random() * Math.PI * 2;
             
             this.initialized = false;
-            this.dying = false; // Add dying state to allow flash to be seen
-            this.hitFilter = ''; // Store the random color
+            this.dying = false; 
+            this.hitFilter = ''; 
             
             if (type === 'snowman') {
                 this.img = snowmanImg;
@@ -884,13 +944,11 @@
                 this.bounceOffset = 0;
             }
             
-            // Maintain FX_SCALE for speed to keep gameplay feeling roughly same speed on big screen
             this.speed = (Math.random() * 1.5 + this.speedBase) * FX_SCALE * 0.6; 
 
-            // Y will be set after init
             this.y = 0;
             if (this.direction === 1) {
-                this.x = -200; // Placeholder
+                this.x = -200; 
             } else {
                 this.x = canvas.width + 200;
             }
@@ -899,13 +957,11 @@
         update() {
             super.update();
             
-            // Init dimensions from sprite naturally
             if (!this.initialized && this.img.complete && this.img.naturalWidth > 0) {
                 this.w = this.img.naturalWidth;
                 this.h = this.img.naturalHeight;
                 this.y = this.baseY - this.h;
                 
-                // Fix spawn X now that we know width
                 if (this.direction === 1) {
                     this.x = -this.w - 50;
                 } else {
@@ -917,14 +973,12 @@
             
             if (!this.initialized) return;
 
-            // Movement stops when dying
             if (!this.dying) {
                 this.x += this.speed * this.direction;
 
                 if (this.type === 'elf' || this.type === 'reindeer') {
                     const time = Date.now() / 100 + this.hopPhase;
                     const absSin = Math.abs(Math.sin(time));
-                    // Scale bounce height by FX_SCALE for gameplay feel
                     const bounceHeight = (this.type === 'reindeer') ? 15 * FX_SCALE : 50 * FX_SCALE;
 
                     this.bounceOffset = absSin * bounceHeight;
@@ -937,7 +991,6 @@
                     this.markedForDeletion = true;
                 }
             } else {
-                // Dying logic: wait for hit timer then delete
                 if (this.hitTimer <= 0) {
                     this.markedForDeletion = true;
                 }
@@ -945,17 +998,16 @@
         }
 
         onHit() {
-            if (this.dying) return; // Don't hit twice
+            if (this.dying) return; 
             
             state.score += this.scoreVal;
             updateUI();
             
-            // Assign Random Filter
             this.hitFilter = HIT_FILTERS[Math.floor(Math.random() * HIT_FILTERS.length)];
             
             this.isHit = true;
-            this.hitTimer = 5; // Flash for 5 frames
-            this.dying = true; // Stop moving, start dying sequence
+            this.hitTimer = 5; 
+            this.dying = true; 
 
             for(let i=0; i<15; i++) {
                 particles.push(new Particle(this.x + this.w/2, this.y + this.h/2, this.color));
@@ -967,7 +1019,6 @@
             
             if (this.isHit) {
                 ctx.save();
-                // Use the randomly assigned filter
                 ctx.filter = this.hitFilter;
             } else {
                 ctx.fillStyle = this.color;
@@ -983,7 +1034,6 @@
 
                 const drawX = this.x;
                 const drawY = (this.baseY - this.h) - jumpHeight;
-                // If dying, freeze visual position to last calculation (simplified by just drawing at current x/y since update stops)
                 
                 const scaledW = this.w * squash;
                 const scaledH = this.h * stretch;
@@ -1024,7 +1074,117 @@
         }
     }
 
-    function init() {
+    // --- SYSTEM FUNCTIONS ---
+
+    function setupMenu() {
+        // Clear buttons if any
+        entities = entities.filter(e => !(e instanceof ButtonTarget) && !(e instanceof ImageButtonTarget));
+        
+        // Add Logo & Buttons
+        const cx = canvas.width / 2;
+        const cy = canvas.height / 2;
+        
+        // Start Button (Moved down, gap reduced)
+        entities.push(new ButtonTarget(cx, cy + 180, "START GAME", startGame));
+        // Highscore Button (Closer to Start)
+        entities.push(new ButtonTarget(cx, cy + 280, "HIGHSCORE", showHighscores));
+    }
+
+    function startGame() {
+        state.current = STATES.PLAYING;
+        state.score = 0;
+        state.time = 60;
+        updateUI();
+        
+        // Clear buttons
+        entities = entities.filter(e => !(e instanceof ButtonTarget) && !(e instanceof ImageButtonTarget));
+        
+        // Reset Props (Refill gifts, fix windows, etc if we want full reset)
+        // For now, simpler to just re-init everything
+        initLevel();
+        
+        spawnLoop();
+        startTimer();
+    }
+
+    function checkHighscore() {
+        // Simple logic: Is score in top 10?
+        if (state.highscores.length < 10) return true;
+        return state.score > state.highscores[state.highscores.length - 1].score;
+    }
+
+    function showGameOver() {
+        state.current = STATES.GAMEOVER;
+        state.enteringInitials = false;
+        
+        const cx = canvas.width / 2;
+        const cy = canvas.height / 2;
+        
+        // Check Highscore
+        if (checkHighscore()) {
+            state.enteringInitials = true;
+            state.playerInitials = "";
+        }
+
+        // Add 3 Icon Buttons
+        const iconY = cy + 300;
+        const spacing = 70 + 120; // Width + gap
+        const startX = cx - spacing; // Center the group of 3 (Left, Center, Right)
+
+        // 1. Highscore
+        entities.push(new ImageButtonTarget(startX, iconY, iconHighscore, showHighscores));
+        // 2. Retry
+        entities.push(new ImageButtonTarget(startX + spacing, iconY, iconRetry, startGame));
+        // 3. Menu
+        entities.push(new ImageButtonTarget(startX + spacing * 2, iconY, iconMenu, () => {
+            setupMenu();
+            state.current = STATES.MENU;
+        }));
+    }
+
+    function showHighscores() {
+        state.current = STATES.HIGHSCORE;
+        // Clear Buttons
+        entities = entities.filter(e => !(e instanceof ButtonTarget) && !(e instanceof ImageButtonTarget));
+        
+        const cx = canvas.width / 2;
+        const cy = canvas.height / 2;
+        
+        // Back Button
+        entities.push(new ButtonTarget(cx, cy + 350, "BACK", () => {
+            setupMenu();
+            state.current = STATES.MENU;
+        }));
+    }
+
+    // Input Handling for Initials
+    window.addEventListener('keydown', (e) => {
+        if (state.current === STATES.GAMEOVER && state.enteringInitials) {
+            if (e.key.length === 1 && e.key.match(/[a-zA-Z0-9]/)) {
+                if (state.playerInitials.length < 3) {
+                    state.playerInitials += e.key.toUpperCase();
+                }
+            } else if (e.key === 'Backspace') {
+                state.playerInitials = state.playerInitials.slice(0, -1);
+            }
+
+            // Save on 3rd char? Or maybe enter key. User said "When player has entered 3 initials it saves"
+            if (state.playerInitials.length === 3) {
+                // Save logic
+                state.highscores.push({
+                    name: state.playerInitials,
+                    score: state.score
+                });
+                state.highscores.sort((a,b) => b.score - a.score);
+                if (state.highscores.length > 10) state.highscores.pop();
+                
+                state.enteringInitials = false; // Stop editing
+                // Don't jump, stay here.
+            }
+        }
+    });
+
+    function initLevel() {
         entities.length = 0;
         particles.length = 0;
         snowballs.length = 0;
@@ -1033,39 +1193,26 @@
         // 0: Tree
         // 1: Gifts
         // 2: Fire, Windows
+        // 2.5: Snow
         // 3: Sill, Wreath
         // 4: Frames
         // 5: Socks
         // 6: Lights
         // 7: Dog, Bear
         // 8: Enemies
+        // 100: UI
 
         // Layer 0: Tree
         entities.push(new Tree()); 
 
-        // Layer 1: Gifts (Updated Coords - Treated as (Left, Bottom))
+        // Layer 1: Gifts
         const giftCoords = [
-            {x: 101, y: 879},
-            {x: 218, y: 884},
-            {x: 335, y: 891},
-            {x: 448, y: 891},
-            {x: 551, y: 903}
+            {x: 101, y: 879}, {x: 218, y: 884}, {x: 335, y: 891}, {x: 448, y: 891}, {x: 551, y: 903}
         ];
         for(let i=0; i<5; i++) {
             entities.push(new Gift(i, giftCoords[i].x, giftCoords[i].y, giftImgs[i]));
         }
-        const alignInterval = setInterval(() => {
-            let allLoaded = true;
-            let xPos = 101;
-            const gifts = entities.filter(e => e instanceof Gift);
-            for (let g of gifts) {
-                if (g.w === 0) allLoaded = false;
-                g.x = xPos;
-                xPos += g.w; 
-            }
-            if (allLoaded || state.time < 58) clearInterval(alignInterval);
-        }, 100);
-
+        
         // Layer 2: Fire, Windows
         entities.push(new Fire());
         const winCoords = [
@@ -1075,15 +1222,13 @@
             entities.push(new WindowPane(windowImgs.normal[i], windowImgs.broken[i], pos.x, pos.y)); 
         });
 
-        // Layer 2.5: Snow (Behind Sill, In front of Windows)
+        // Layer 2.5: Snow
         entities.push(new SnowTank());
 
         // Layer 3: Sill, Wreath
-        // Sill set to non-collidable so hits pass through to windows
         const sill = new SimpleProp(sillImg, 1317, 232, 3);
         sill.collidable = false;
         entities.push(sill);
-        
         entities.push(new Wreath());
 
         // Layer 4: Frames
@@ -1099,9 +1244,7 @@
 
         // Layer 5: Socks
         const sockCoords = [
-            {x: 737, y: 517, c: '#ff0000'}, 
-            {x: 898, y: 519, c: '#00ff00'}, 
-            {x: 1073, y: 516, c: '#0000ff'}
+            {x: 737, y: 517, c: '#ff0000'}, {x: 898, y: 519, c: '#00ff00'}, {x: 1073, y: 516, c: '#0000ff'}
         ];
         sockCoords.forEach((data, i) => {
             entities.push(new SimpleProp(sockImgs[i], data.x, data.y, 5, (x, y, w, h) => {
@@ -1127,20 +1270,19 @@
         // Layer 7: Dog, Bear
         entities.push(new Dog());
         entities.push(new Bear());
+    }
+
+    function init() {
+        initLevel();
+        setupMenu(); // Start in Menu
         
-        state.score = 0;
-        state.time = 60;
-        state.active = true;
-        updateUI();
-        document.getElementById('game-over').style.display = 'none';
+        state.current = STATES.MENU;
         
-        spawnLoop();
-        startTimer();
         requestAnimationFrame(gameLoop);
     }
 
     function spawnLoop() {
-        if (!state.active) return;
+        if (state.current !== STATES.PLAYING) return;
         
         const r = Math.random();
         
@@ -1170,7 +1312,6 @@
     }
 
     function checkCollision(impactX, impactY) {
-        // Sort entities by Layer DESCENDING (Hit front items first)
         const hitOrder = [...entities].sort((a,b) => {
             if (b.layer !== a.layer) return b.layer - a.layer;
             return b.getZ() - a.getZ();
@@ -1179,7 +1320,6 @@
         let hitSomething = false;
 
         for (let ent of hitOrder) {
-            // Check collision only if the item is collidable
             if (ent.collidable && ent.checkHit(impactX, impactY)) {
                 ent.onHit();
                 ent.isHit = true;
@@ -1192,20 +1332,14 @@
 
     function startTimer() {
         const timerId = setInterval(() => {
-            if (!state.active) {
+            if (state.current !== STATES.PLAYING) {
                 clearInterval(timerId);
                 return;
             }
             state.time--;
             updateUI();
-            if (state.time <= 0) endGame();
+            if (state.time <= 0) showGameOver();
         }, 1000);
-    }
-
-    function endGame() {
-        state.active = false;
-        document.getElementById('final-score').innerText = state.score.toString().padStart(4, '0');
-        document.getElementById('game-over').style.display = 'block';
     }
 
     function updateUI() {
@@ -1220,13 +1354,9 @@
     });
 
     canvas.addEventListener('mousedown', () => {
-        if (!state.active) return;
+        // Shooting allowed in MENU, PLAYING, and GAMEOVER to hit buttons/props
         snowballs.push(new Snowball(mouse.x, mouse.y));
     });
-
-    function resetGame() {
-        init();
-    }
 
     function gameLoop() {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -1239,15 +1369,14 @@
             ctx.fillStyle = '#3e2f26'; ctx.fillRect(0, canvas.height - 200, canvas.width, 200);
         }
 
-        // UPDATE LOOP (Backwards for splice safety)
+        // UPDATE LOOP
         for (let i = entities.length - 1; i >= 0; i--) {
             let ent = entities[i];
             ent.update();
             if (ent.markedForDeletion) entities.splice(i, 1);
         }
 
-        // DRAW LOOP (Separate pass for correct Z-Ordering)
-        // Sort Ascending (0..8)
+        // DRAW LOOP (Game Entities)
         entities.sort((a, b) => {
             if (a.layer !== b.layer) return a.layer - b.layer;
             return a.getZ() - b.getZ();
@@ -1257,6 +1386,103 @@
             ent.draw(ctx);
         }
 
+        // DRAW OVERLAYS FOR MENU / GAMEOVER / HIGHSCORE
+        if (state.current === STATES.MENU || state.current === STATES.GAMEOVER || state.current === STATES.HIGHSCORE) {
+            // Dark Cherry Overlay
+            ctx.fillStyle = 'rgba(44, 14, 28, 0.69)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Re-Draw UI Buttons on top of overlay (Filter entities for Layer 100)
+            const uiButtons = entities.filter(e => e.layer === 100);
+            uiButtons.forEach(btn => btn.draw(ctx));
+
+            // Draw Logo in Menu
+            if (state.current === STATES.MENU && logoImg.complete) {
+                const lw = logoImg.naturalWidth;
+                const lh = logoImg.naturalHeight;
+                const lx = (canvas.width - lw) / 2;
+                const ly = 250; // Dropped Logo Down
+                ctx.drawImage(logoImg, lx, ly);
+            }
+
+            // Draw Text for Game Over
+            if (state.current === STATES.GAMEOVER) {
+                ctx.fillStyle = '#ffffff';
+                ctx.font = '100px "Press Start 2P"'; 
+                ctx.textAlign = 'center';
+                ctx.fillText("TIME'S UP!", canvas.width/2, canvas.height/2 - 200); 
+                
+                // Score Display Logic
+                if (state.enteringInitials) {
+                    // New Highscore Input Mode
+                    ctx.font = '40px "Press Start 2P"'; 
+                    ctx.fillText("HIGH SCORE", canvas.width/2, canvas.height/2 - 40);
+                    
+                    ctx.fillStyle = '#ffd700';
+                    ctx.font = '120px "Press Start 2P"';
+                    const scoreText = state.score.toString();
+                    
+                    // Layout: INITIALS <INPUT>
+                    ctx.font = '40px "Press Start 2P"';
+                    ctx.fillStyle = '#fff';
+                    ctx.fillText("INITIALS", canvas.width/2 - 200, canvas.height/2 + 100);
+                    
+                    // Input Box
+                    ctx.fillStyle = '#222';
+                    ctx.fillRect(canvas.width/2 + 20, canvas.height/2 + 50, 300, 80);
+                    
+                    // Typed Letters
+                    ctx.fillStyle = '#ffd700';
+                    ctx.font = '60px "Press Start 2P"';
+                    ctx.fillText(state.playerInitials + (Date.now() % 1000 < 500 ? "_" : ""), canvas.width/2 + 170, canvas.height/2 + 110);
+
+                } else {
+                    // Standard Result
+                    ctx.font = '40px "Press Start 2P"'; 
+                    ctx.fillText("FINAL SCORE", canvas.width/2, canvas.height/2 - 40);
+                    
+                    ctx.fillStyle = '#ffd700';
+                    ctx.font = '120px "Press Start 2P"';
+                    ctx.fillText(state.score.toString(), canvas.width/2, canvas.height/2 + 100); 
+                }
+            }
+
+            // Draw Highscores
+            if (state.current === STATES.HIGHSCORE) {
+                ctx.fillStyle = '#ffffff';
+                ctx.font = '100px "Press Start 2P"';
+                ctx.textAlign = 'center';
+                ctx.fillText("HIGHSCORE", canvas.width/2, 200);
+
+                ctx.font = '40px "Press Start 2P"';
+                const startY = 350;
+                const lineHeight = 60;
+                
+                // Header
+                ctx.fillStyle = '#ffd700';
+                ctx.fillText("RANK   SCORE   NAME", canvas.width/2, 300);
+                
+                ctx.fillStyle = '#ffffff';
+                for(let i=0; i<10; i++) {
+                    const entry = state.highscores[i] || {score: 0, name: '---'};
+                    const y = startY + i * lineHeight;
+                    
+                    // Rank
+                    ctx.textAlign = 'right';
+                    ctx.fillText((i+1) + ".", canvas.width/2 - 300, y);
+                    
+                    // Score
+                    ctx.textAlign = 'center';
+                    ctx.fillText(entry.score.toString().padStart(6, '0'), canvas.width/2, y);
+                    
+                    // Name
+                    ctx.textAlign = 'left';
+                    ctx.fillText(entry.name, canvas.width/2 + 200, y);
+                }
+            }
+        }
+
+        // Particles & Snowballs always on top
         for (let i = snowballs.length - 1; i >= 0; i--) {
             let s = snowballs[i];
             s.update();
@@ -1272,16 +1498,23 @@
         }
 
         // Crosshair
-        ctx.strokeStyle = '#ff0000';
-        ctx.lineWidth = 4;
-        ctx.beginPath();
-        ctx.arc(mouse.x, mouse.y, 40, 0, Math.PI*2);
-        ctx.stroke();
-        ctx.beginPath();
-        ctx.moveTo(mouse.x - 50, mouse.y); ctx.lineTo(mouse.x + 50, mouse.y);
-        ctx.moveTo(mouse.x, mouse.y - 50); ctx.lineTo(mouse.x, mouse.y + 50);
-        ctx.stroke();
-        ctx.fillStyle = 'red'; ctx.fillRect(mouse.x - 2, mouse.y - 2, 4, 4);
+        if (crosshairImg.complete && crosshairImg.naturalWidth > 0) {
+             const cw = crosshairImg.naturalWidth; // No Scale
+             const ch = crosshairImg.naturalHeight; // No Scale
+             ctx.drawImage(crosshairImg, mouse.x - cw/2, mouse.y - ch/2, cw, ch);
+        } else {
+            // Fallback to old crosshair
+            ctx.strokeStyle = '#ff0000';
+            ctx.lineWidth = 4;
+            ctx.beginPath();
+            ctx.arc(mouse.x, mouse.y, 40, 0, Math.PI*2);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(mouse.x - 50, mouse.y); ctx.lineTo(mouse.x + 50, mouse.y);
+            ctx.moveTo(mouse.x, mouse.y - 50); ctx.lineTo(mouse.x, mouse.y + 50);
+            ctx.stroke();
+            ctx.fillStyle = 'red'; ctx.fillRect(mouse.x - 2, mouse.y - 2, 4, 4);
+        }
 
         requestAnimationFrame(gameLoop);
     }
