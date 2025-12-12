@@ -515,7 +515,7 @@
 
             if (this.dying && this.hitTimer <= 0) {
                 this.markedForDeletion = true;
-                 for(let k=0; k<12; k++) particles.push(new Particle(this.x+this.w/2, this.y+this.h/2, '#555555', 6, 6));
+                // Removed smoke particles to prevent lag
             }
         }
 
