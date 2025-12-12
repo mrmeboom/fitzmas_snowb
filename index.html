@@ -21,6 +21,7 @@
 
         #game-container {
             position: relative;
+            /* 1974x1168 Aspect Ratio */
             width: 95vw;
             height: auto;
             aspect-ratio: 1974/1168;
@@ -129,6 +130,11 @@
     iconRetry.src = 'https://i.imgur.com/t2FzJ6S.png';
     const iconMenu = new Image();
     iconMenu.src = 'https://i.imgur.com/NeJWcts.png';
+
+    const soundOnImg = new Image();
+    soundOnImg.src = 'https://i.imgur.com/ltNMObz.png';
+    const soundOffImg = new Image();
+    soundOffImg.src = 'https://i.imgur.com/Q0JLLiA.png';
 
     const snowmanImg = new Image();
     snowmanImg.src = 'https://i.imgur.com/ZUjWUMA.png';
@@ -248,7 +254,8 @@
         shake: 0,
         highscores: [], // {rank: 1, score: 100, name: 'AAA'}
         enteringInitials: false,
-        playerInitials: ''
+        playerInitials: '',
+        soundEnabled: true
     };
 
     const mouse = { x: 0, y: 0 };
@@ -294,6 +301,7 @@
             this.speed = 0.05;
             this.progress = 0;
             this.markedForDeletion = false;
+            // Snowballs are on top layer
             this.layer = 100;
         }
 
@@ -367,24 +375,27 @@
     // --- UI ENTITIES (Buttons) ---
     class ButtonTarget extends Entity {
         constructor(x, y, text, action) {
-            super(x, y, 100); 
+            super(x, y, 100); // High layer (UI)
             this.text = text;
             this.action = action;
-            this.w = 600; 
+            this.w = 600; // Increased width for larger text
             this.h = 100;
+            // Center alignment adjustment done in constructor
             this.x = x - this.w/2; 
         }
 
         draw(ctx) {
             ctx.save();
             
+            // Hit flash
             if (this.isHit) {
                 ctx.fillStyle = '#ffffff';
                 ctx.fillRect(this.x, this.y, this.w, this.h);
             } 
             
-            ctx.fillStyle = this.isHit ? '#ff0044' : '#ffd700'; 
-            ctx.font = '50px "Press Start 2P"'; 
+            // Text - Yellow with Hard Shadow
+            ctx.fillStyle = this.isHit ? '#ff0044' : '#ffd700'; // Red on hit, Yellow normally
+            ctx.font = '50px "Press Start 2P"'; // Increased Font Size
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             
@@ -403,7 +414,9 @@
         onHit() {
             this.isHit = true;
             this.hitTimer = 5;
+            // Particles
             for(let i=0; i<20; i++) particles.push(new Particle(this.x + this.w/2, this.y + this.h/2, '#ffd700', 20));
+            // Trigger Action
             setTimeout(() => {
                 this.markedForDeletion = true;
                 this.action();
@@ -460,6 +473,53 @@
                 this.markedForDeletion = true;
                 this.action();
             }, 200);
+        }
+    }
+
+    class SoundToggle extends Entity {
+        constructor() {
+            // Layer 100 (UI)
+            // Position Bottom Left with some padding (30, 30 from corner)
+            // Canvas Height is 1168.
+            super(30, 1168 - 30, 100); 
+            this.initialized = false;
+        }
+
+        update() {
+            const currentImg = state.soundEnabled ? soundOnImg : soundOffImg;
+            if (!this.initialized && currentImg.complete && currentImg.naturalWidth > 0) {
+                this.w = currentImg.naturalWidth;
+                this.h = currentImg.naturalHeight;
+                // Move Y up by height so (30, bottom) is bottom-left corner anchor
+                this.y = 1168 - 30 - this.h;
+                this.initialized = true;
+            }
+        }
+
+        onClick() {
+            state.soundEnabled = !state.soundEnabled;
+            // No hit flash needed for toggle, just state change
+        }
+
+        draw(ctx) {
+            const img = state.soundEnabled ? soundOnImg : soundOffImg;
+            if (img.complete && img.naturalWidth > 0) {
+                // Ensure dimensions are set if sprite loaded late
+                if (!this.initialized) {
+                    this.w = img.naturalWidth;
+                    this.h = img.naturalHeight;
+                    this.y = 1168 - 30 - this.h;
+                    this.initialized = true;
+                }
+                
+                ctx.save();
+                ctx.shadowColor = "black";
+                ctx.shadowBlur = 0;
+                ctx.shadowOffsetX = 3;
+                ctx.shadowOffsetY = 3;
+                ctx.drawImage(img, this.x, this.y, this.w, this.h);
+                ctx.restore();
+            }
         }
     }
 
@@ -851,6 +911,7 @@
 
     class Dog extends Entity {
         constructor() {
+            // Layer 7 (Floor Prop)
             super(1300, 1000, 7);
             this.state = 'sleeping'; 
             this.wakeTimer = 0;
@@ -1270,6 +1331,9 @@
         // Layer 7: Dog, Bear
         entities.push(new Dog());
         entities.push(new Bear());
+
+        // Layer 100: Sound Toggle
+        entities.push(new SoundToggle());
     }
 
     function init() {
@@ -1354,6 +1418,16 @@
     });
 
     canvas.addEventListener('mousedown', () => {
+        // Check UI clicks (Sound Toggle)
+        // We need to iterate front-to-back (high layer first) or just check the UI list
+        const uiEntities = entities.filter(e => e instanceof SoundToggle);
+        for (let btn of uiEntities) {
+            if (btn.checkHit(mouse.x, mouse.y)) {
+                btn.onClick();
+                return; // Stop propagation (no snowball)
+            }
+        }
+
         // Shooting allowed in MENU, PLAYING, and GAMEOVER to hit buttons/props
         snowballs.push(new Snowball(mouse.x, mouse.y));
     });
