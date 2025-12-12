@@ -150,19 +150,19 @@
     
     // --- ASSETS ---
     const bgImg = new Image();
-    bgImg.src = 'https://i.imgur.com/yWuMU6w.png';
+    bgImg.src = 'https://i.imgur.com/ItZx3i7.png';
 
     const snowmanImg = new Image();
-    snowmanImg.src = 'https://i.imgur.com/dTTOgiV.png';
+    snowmanImg.src = 'https://i.imgur.com/ZUjWUMA.png';
 
     const santaImg = new Image();
-    santaImg.src = 'https://i.imgur.com/HwBT5VO.png';
+    santaImg.src = 'https://i.imgur.com/O4JEQNl.png';
 
     const elfImg = new Image();
-    elfImg.src = 'https://i.imgur.com/dqAFiWH.png';
+    elfImg.src = 'https://i.imgur.com/Ebjgseh.png';
 
     const reindeerImg = new Image();
-    reindeerImg.src = 'https://i.imgur.com/TZcZHMg.png';
+    reindeerImg.src = 'https://i.imgur.com/7NjMnbn.png';
 
     const bearAliveImg = new Image();
     bearAliveImg.src = 'https://i.imgur.com/sbiJDNt.png';
@@ -243,7 +243,17 @@
         ])
     };
 
-    const SCALE = 2.45; 
+    // Hit Filters for Enemies (Red, Green, Pink, Turquoise, Blue, Yellow)
+    const HIT_FILTERS = [
+        'sepia(1) saturate(100) hue-rotate(-50deg) contrast(2)',   // Red
+        'sepia(1) saturate(100) hue-rotate(60deg) contrast(2)',    // Green
+        'sepia(1) saturate(100) hue-rotate(240deg) contrast(2)',   // Pink
+        'sepia(1) saturate(100) hue-rotate(130deg) contrast(2)',   // Turquoise
+        'sepia(1) saturate(100) hue-rotate(180deg) contrast(2)',   // Blue
+        'sepia(1) saturate(100) hue-rotate(0deg) contrast(2)'      // Yellow
+    ];
+
+    const FX_SCALE = 2.5; 
 
     let state = {
         score: 0,
@@ -266,7 +276,7 @@
             this.vy = (Math.random() - 0.5) * speed;
             this.life = 1.0;
             this.color = color;
-            this.size = (Math.random() * size + 2) * SCALE;
+            this.size = (Math.random() * size + 2) * FX_SCALE;
         }
         update() {
             this.x += this.vx;
@@ -319,7 +329,7 @@
 
         draw(ctx) {
             const scale = 1.0 - (this.progress * 0.5); 
-            const size = (15 * SCALE) * scale;
+            const size = (15 * FX_SCALE) * scale;
             ctx.fillStyle = '#fff';
             ctx.beginPath();
             ctx.arc(this.x, this.y, size, 0, Math.PI * 2);
@@ -337,6 +347,7 @@
             this.markedForDeletion = false;
             this.isHit = false; 
             this.hitTimer = 0;
+            this.collidable = true; // New property for hitbox logic
         }
 
         getZ() {
@@ -376,8 +387,9 @@
         update() {
             super.update();
             if (!this.initialized && this.img.complete && this.img.naturalWidth > 0) {
-                this.w = this.img.naturalWidth * SCALE * 0.5;
-                this.h = this.img.naturalHeight * SCALE * 0.5;
+                // NO SCALING - Use natural size
+                this.w = this.img.naturalWidth;
+                this.h = this.img.naturalHeight;
                 this.initialized = true;
             }
         }
@@ -397,10 +409,81 @@
         }
     }
     
+    // --- SPECIAL FX ENTITIES ---
+
+    class SnowTank extends Entity {
+        constructor() {
+            // Layer 2.5: Between Windows (2) and Sill (3)
+            // Coordinates provided: TL: 1375, 245 | BR: 1828, 582
+            const x = 1375;
+            const y = 245;
+            const w = 1828 - 1375; // 453
+            const h = 582 - 245;   // 337
+            
+            super(x, y, 2.5);
+            this.w = w;
+            this.h = h;
+            this.collidable = false; // Snowballs pass through
+            
+            this.flakes = [];
+            // Pre-populate snow
+            for(let i=0; i<100; i++) {
+                this.flakes.push(this.createFlake(true));
+            }
+        }
+
+        createFlake(randomY = false) {
+            return {
+                x: Math.random() * this.w,
+                y: randomY ? Math.random() * this.h : -10, // Start above or random
+                size: (Math.random() * 2 + 1) * FX_SCALE,
+                speed: (Math.random() * 1 + 0.5) * FX_SCALE * 0.5,
+                swayOffset: Math.random() * Math.PI * 2,
+                swaySpeed: (Math.random() * 0.02 + 0.01)
+            };
+        }
+
+        update() {
+            // No hit logic needed
+            const time = Date.now();
+            
+            for (let f of this.flakes) {
+                f.y += f.speed;
+                // Wind logic: Sine wave + slight constant right drift
+                f.x += Math.sin(time * 0.002 + f.swayOffset) * 0.5 + 0.2;
+
+                // Wrap around
+                if (f.y > this.h) {
+                    f.y = -10;
+                    f.x = Math.random() * this.w;
+                }
+            }
+        }
+
+        draw(ctx) {
+            ctx.save();
+            
+            // 1. Define Clipping Region (The Tank)
+            ctx.beginPath();
+            ctx.rect(this.x, this.y, this.w, this.h);
+            ctx.clip(); // Only draw pixels inside this rect
+
+            // 2. Draw Snowflakes
+            ctx.fillStyle = '#ffffff';
+            for (let f of this.flakes) {
+                // Draw relative to Tank position
+                ctx.fillRect(this.x + f.x, this.y + f.y, f.size, f.size);
+            }
+
+            ctx.restore();
+        }
+    }
+    
     class Fire extends Entity {
         constructor() {
             // Layer 2: Inside Wall
-            super(913, 620, 2); 
+            // Updated coords: 832, 657 (Top-Left)
+            super(832, 657, 2); 
             this.img = fireImg;
             this.initialized = false;
             this.dying = false;
@@ -409,13 +492,13 @@
         update() {
             super.update();
             if (!this.initialized && this.img.complete && this.img.naturalWidth > 0) {
-                this.w = this.img.naturalWidth * SCALE * 0.5;
-                this.h = this.img.naturalHeight * SCALE * 0.5;
-                this.x = 913 - (this.w / 2);
-                this.y = 620; 
+                this.w = this.img.naturalWidth;
+                this.h = this.img.naturalHeight;
+                // Use constructor coords (832, 657), don't override with centering logic
                 this.initialized = true;
             }
 
+            // Wait for hit flash to finish before deleting
             if (this.dying && this.hitTimer <= 0) {
                 this.markedForDeletion = true;
                  for(let k=0; k<12; k++) particles.push(new Particle(this.x+this.w/2, this.y+this.h/2, '#555555', 6, 6));
@@ -426,18 +509,37 @@
             if (this.dying) return;
             state.score += 15;
             updateUI();
+            
             this.isHit = true;
-            this.hitTimer = 10; 
+            this.hitTimer = 6; // Show flash for 6 frames (approx 0.1s)
             this.dying = true;
         }
 
         draw(ctx) {
             if (!this.initialized) return;
+            
             ctx.save();
+            
             if (this.isHit) {
-                 ctx.filter = 'sepia(1) saturate(100) hue-rotate(-50deg) contrast(2)';
+                 // Force Yellow Flash
+                 ctx.filter = 'sepia(1) saturate(100) hue-rotate(0deg) contrast(2)';
             }
-            ctx.drawImage(this.img, this.x, this.y, this.w, this.h);
+
+            // Raster Wiggle Effect
+            const time = Date.now() / 150; 
+            const sliceHeight = 2; 
+            
+            for (let i = 0; i < this.h; i += sliceHeight) {
+                const xOffset = Math.sin(time + (i * 0.05)) * 3; 
+                const h = Math.min(sliceHeight, this.h - i);
+                
+                ctx.drawImage(
+                    this.img, 
+                    0, i, this.w, h,           
+                    this.x + xOffset, this.y + i, this.w, h 
+                );
+            }
+            
             ctx.restore();
         }
     }
@@ -455,8 +557,8 @@
         update() {
             super.update();
             if (!this.initialized && this.normalImg.complete && this.normalImg.naturalWidth > 0) {
-                this.w = this.normalImg.naturalWidth * SCALE * 0.5;
-                this.h = this.normalImg.naturalHeight * SCALE * 0.5;
+                this.w = this.normalImg.naturalWidth;
+                this.h = this.normalImg.naturalHeight;
                 this.initialized = true;
             }
         }
@@ -496,8 +598,8 @@
                 if (Math.abs(this.shakeOffset) < 1) this.shakeOffset = 0;
             }
             if (!this.initialized && this.img.complete && this.img.naturalWidth > 0) {
-                this.w = this.img.naturalWidth * SCALE * 0.5;
-                this.h = this.img.naturalHeight * SCALE * 0.5;
+                this.w = this.img.naturalWidth;
+                this.h = this.img.naturalHeight;
                 this.initialized = true;
             }
         }
@@ -515,6 +617,7 @@
 
         draw(ctx) {
             if (!this.initialized) return;
+            
             ctx.save();
             ctx.translate(this.shakeOffset, 0);
             if (this.isHit) {
@@ -540,8 +643,8 @@
                 if (Math.abs(this.shakeOffset) < 1) this.shakeOffset = 0;
             }
             if (treeImg.complete && treeImg.naturalWidth > 0) {
-                this.w = treeImg.naturalWidth * SCALE * 0.5;
-                this.h = treeImg.naturalHeight * SCALE * 0.5;
+                this.w = treeImg.naturalWidth;
+                this.h = treeImg.naturalHeight;
             }
         }
 
@@ -575,11 +678,11 @@
     }
 
     class Gift extends Entity {
-        constructor(index, startX, bottomY, img) {
+        constructor(index, startX, topY, img) {
             // Layer 1: In front of Tree
             super(startX, 0, 1); 
             this.index = index;
-            this.bottomY = bottomY;
+            this.topY = topY;
             this.img = img;
             this.initialized = false;
             this.color = ['#ff0000', '#00ff00', '#0000ff', '#ffff00', '#00ffff'][index];
@@ -588,9 +691,10 @@
         update() {
             super.update();
             if (!this.initialized && this.img.complete && this.img.naturalWidth > 0) {
-                this.w = this.img.naturalWidth * SCALE * 0.5;
-                this.h = this.img.naturalHeight * SCALE * 0.5;
-                this.y = this.bottomY - this.h;
+                this.w = this.img.naturalWidth;
+                this.h = this.img.naturalHeight;
+                // Align Top-Left
+                this.y = this.topY;
                 this.initialized = true;
             }
         }
@@ -631,6 +735,7 @@
             this.targetY1 = 950; 
             this.targetX2 = 1770;
             this.targetY2 = 937;
+            this.initialized = false;
         }
 
         update() {
@@ -641,12 +746,13 @@
             }
             let img = this.alive ? bearAliveImg : bearDeadImg;
             if (img.complete && img.naturalWidth > 0) {
-                this.w = img.naturalWidth * SCALE * 0.5; 
-                this.h = img.naturalHeight * SCALE * 0.5;
+                this.w = img.naturalWidth;
+                this.h = img.naturalHeight;
                 const targetX = this.alive ? this.targetX1 : this.targetX2;
                 const targetY = this.alive ? this.targetY1 : this.targetY2;
                 this.x = targetX - this.w;
                 this.y = targetY - this.h;
+                this.initialized = true;
             }
         }
 
@@ -665,6 +771,7 @@
         }
 
         draw(ctx) {
+            if (!this.initialized) return;
             ctx.save();
             ctx.translate(this.shakeOffset, 0);
             if (this.isHit) {
@@ -689,6 +796,7 @@
             this.targetY1 = 1060;
             this.targetX2 = 1333;
             this.targetY2 = 1047;
+            this.initialized = false;
         }
 
         update() {
@@ -699,12 +807,13 @@
             }
             let img = this.state === 'sleeping' ? dogSleepImg : dogAwakeImg;
             if (img.complete && img.naturalWidth > 0) {
-                this.w = img.naturalWidth * SCALE * 0.5; 
-                this.h = img.naturalHeight * SCALE * 0.5;
+                this.w = img.naturalWidth; 
+                this.h = img.naturalHeight;
                 const targetX = this.state === 'sleeping' ? this.targetX1 : this.targetX2;
                 const targetY = this.state === 'sleeping' ? this.targetY1 : this.targetY2;
                 this.x = targetX - this.w;
                 this.y = targetY - this.h;
+                this.initialized = true;
             }
         }
 
@@ -722,13 +831,11 @@
         }
 
         draw(ctx) {
+            if (!this.initialized) return;
             let img = this.state === 'sleeping' ? dogSleepImg : dogAwakeImg;
             if (img.complete && img.naturalWidth > 0) {
                  ctx.drawImage(img, this.x, this.y, this.w, this.h);
-            } else {
-                ctx.fillStyle = this.state === 'sleeping' ? '#8b4513' : '#cd853f';
-                ctx.fillRect(this.x, this.y, this.w, this.h);
-            }
+            } 
             
             if (this.state === 'sleeping' && Math.floor(Date.now() / 800) % 2 === 0) {
                 ctx.fillStyle = 'white';
@@ -744,77 +851,124 @@
             super(-400, 0, 8); 
             this.type = type;
             this.direction = Math.random() > 0.5 ? 1 : -1;
+            
+            // Adjust spawn Y to floor range
             this.baseY = 900 + Math.random() * 200; 
             this.hopPhase = Math.random() * Math.PI * 2;
             
+            this.initialized = false;
+            this.dying = false; // Add dying state to allow flash to be seen
+            this.hitFilter = ''; // Store the random color
+            
             if (type === 'snowman') {
-                this.w = 160 * SCALE; this.h = 280 * SCALE;
-                this.speed = (Math.random() * 1.5 + 0.5) * SCALE * 0.6; 
+                this.img = snowmanImg;
+                this.speedBase = 1.5;
                 this.scoreVal = 100;
                 this.color = '#fff';
             } else if (type === 'elf') {
-                this.w = 50 * SCALE; this.h = 80 * SCALE;
-                this.speed = (Math.random() * 1.5 + 1.5) * SCALE * 0.6; 
+                this.img = elfImg;
+                this.speedBase = 3.0;
                 this.scoreVal = 200;
                 this.color = '#52b748';
                 this.bounceOffset = 0;
             } else if (type === 'santa') {
-                this.w = 240 * SCALE; this.h = 240 * SCALE;
-                this.speed = 3.6 * SCALE * 0.6; 
+                this.img = santaImg;
+                this.speedBase = 3.6;
                 this.scoreVal = 1000;
                 this.color = '#d32f2f';
             } else if (type === 'reindeer') {
-                this.w = 60 * SCALE; this.h = 60 * SCALE; 
-                this.speed = 2 * SCALE * 0.6;
+                this.img = reindeerImg;
+                this.speedBase = 2;
                 this.scoreVal = 50;
                 this.color = '#8B4513';
                 this.bounceOffset = 0;
             }
-
-            this.y = this.baseY - this.h; 
             
+            // Maintain FX_SCALE for speed to keep gameplay feeling roughly same speed on big screen
+            this.speed = (Math.random() * 1.5 + this.speedBase) * FX_SCALE * 0.6; 
+
+            // Y will be set after init
+            this.y = 0;
             if (this.direction === 1) {
-                this.x = -this.w - 100;
+                this.x = -200; // Placeholder
             } else {
-                this.x = canvas.width + 100;
+                this.x = canvas.width + 200;
             }
         }
 
         update() {
             super.update();
-            this.x += this.speed * this.direction;
-
-            if (this.type === 'elf' || this.type === 'reindeer') {
-                const time = Date.now() / 100 + this.hopPhase;
-                const absSin = Math.abs(Math.sin(time));
-                const bounceHeight = (this.type === 'reindeer') ? 15 * SCALE : 50 * SCALE;
-
-                this.bounceOffset = absSin * bounceHeight;
-                this.y = (this.baseY - this.h) - this.bounceOffset;
-                this.bounceFactor = absSin;
+            
+            // Init dimensions from sprite naturally
+            if (!this.initialized && this.img.complete && this.img.naturalWidth > 0) {
+                this.w = this.img.naturalWidth;
+                this.h = this.img.naturalHeight;
+                this.y = this.baseY - this.h;
+                
+                // Fix spawn X now that we know width
+                if (this.direction === 1) {
+                    this.x = -this.w - 50;
+                } else {
+                    this.x = canvas.width + 50;
+                }
+                
+                this.initialized = true;
             }
+            
+            if (!this.initialized) return;
 
-            if ((this.direction === 1 && this.x > canvas.width) ||
-                (this.direction === -1 && this.x < -this.w)) {
-                this.markedForDeletion = true;
+            // Movement stops when dying
+            if (!this.dying) {
+                this.x += this.speed * this.direction;
+
+                if (this.type === 'elf' || this.type === 'reindeer') {
+                    const time = Date.now() / 100 + this.hopPhase;
+                    const absSin = Math.abs(Math.sin(time));
+                    // Scale bounce height by FX_SCALE for gameplay feel
+                    const bounceHeight = (this.type === 'reindeer') ? 15 * FX_SCALE : 50 * FX_SCALE;
+
+                    this.bounceOffset = absSin * bounceHeight;
+                    this.y = (this.baseY - this.h) - this.bounceOffset;
+                    this.bounceFactor = absSin;
+                }
+
+                if ((this.direction === 1 && this.x > canvas.width) ||
+                    (this.direction === -1 && this.x < -this.w)) {
+                    this.markedForDeletion = true;
+                }
+            } else {
+                // Dying logic: wait for hit timer then delete
+                if (this.hitTimer <= 0) {
+                    this.markedForDeletion = true;
+                }
             }
         }
 
         onHit() {
+            if (this.dying) return; // Don't hit twice
+            
             state.score += this.scoreVal;
             updateUI();
             
+            // Assign Random Filter
+            this.hitFilter = HIT_FILTERS[Math.floor(Math.random() * HIT_FILTERS.length)];
+            
+            this.isHit = true;
+            this.hitTimer = 5; // Flash for 5 frames
+            this.dying = true; // Stop moving, start dying sequence
+
             for(let i=0; i<15; i++) {
                 particles.push(new Particle(this.x + this.w/2, this.y + this.h/2, this.color));
             }
-            
-            this.markedForDeletion = true;
         }
 
         draw(ctx) {
+            if (!this.initialized) return;
+            
             if (this.isHit) {
                 ctx.save();
-                ctx.filter = 'sepia(1) saturate(100) hue-rotate(-50deg) contrast(2)';
+                // Use the randomly assigned filter
+                ctx.filter = this.hitFilter;
             } else {
                 ctx.fillStyle = this.color;
             }
@@ -822,37 +976,29 @@
             if (this.type === 'snowman') {
                 const hopCycle = Math.sin((Date.now() / 400) + this.hopPhase); 
                 const absHop = Math.abs(hopCycle); 
-                const jumpHeight = (20 * SCALE) * absHop;
+                const jumpHeight = (20 * FX_SCALE) * absHop;
                 let stretch = 1.0 + (absHop * 0.2);
                 let squash = 1.0 - (absHop * 0.1); 
                 if (absHop < 0.2) { stretch = 0.9; squash = 1.1; }
 
                 const drawX = this.x;
                 const drawY = (this.baseY - this.h) - jumpHeight;
-                this.y = drawY; 
+                // If dying, freeze visual position to last calculation (simplified by just drawing at current x/y since update stops)
                 
-                if (snowmanImg.complete && snowmanImg.naturalWidth > 0) {
-                    const scaledW = this.w * squash;
-                    const scaledH = this.h * stretch;
-                    const offsetX = (this.w - scaledW) / 2;
-                    const offsetY = (this.h - scaledH); 
-                    ctx.drawImage(snowmanImg, drawX + offsetX, drawY + offsetY, scaledW, scaledH);
-                } else {
-                    ctx.fillRect(drawX, drawY, this.w, this.h);
-                }
+                const scaledW = this.w * squash;
+                const scaledH = this.h * stretch;
+                const offsetX = (this.w - scaledW) / 2;
+                const offsetY = (this.h - scaledH); 
+                ctx.drawImage(this.img, this.x + offsetX, (this.dying ? this.y : drawY) + offsetY, scaledW, scaledH);
 
             } else if (this.type === 'santa') {
-                 if (santaImg.complete && santaImg.naturalWidth > 0) {
-                     ctx.save();
-                     const cx = this.x + this.w / 2;
-                     const cy = this.y + this.h / 2;
-                     ctx.translate(cx, cy);
-                     ctx.rotate(this.x * 0.015); 
-                     ctx.drawImage(santaImg, -this.w/2, -this.h/2, this.w, this.h);
-                     ctx.restore();
-                 } else {
-                    ctx.fillRect(this.x, this.y, this.w, this.h);
-                 }
+                 ctx.save();
+                 const cx = this.x + this.w / 2;
+                 const cy = this.y + this.h / 2;
+                 ctx.translate(cx, cy);
+                 if (!this.dying) ctx.rotate(this.x * 0.015); 
+                 ctx.drawImage(this.img, -this.w/2, -this.h/2, this.w, this.h);
+                 ctx.restore();
 
             } else if (this.type === 'elf' || this.type === 'reindeer') {
                 let stretch = 1.0 + (this.bounceFactor * 0.15); 
@@ -868,12 +1014,7 @@
                 ctx.translate(cx, cy);
                 ctx.scale(this.direction, 1);
                 
-                const img = (this.type === 'reindeer') ? reindeerImg : elfImg;
-                if (img.complete && img.naturalWidth > 0) {
-                     ctx.drawImage(img, -finalW/2, -finalH, finalW, finalH);
-                } else {
-                    ctx.fillRect(-finalW/2, -finalH, finalW, finalH);
-                }
+                ctx.drawImage(this.img, -finalW/2, -finalH, finalW, finalH);
                 ctx.restore();
             }
 
@@ -902,11 +1043,16 @@
         // Layer 0: Tree
         entities.push(new Tree()); 
 
-        // Layer 1: Gifts
-        let currentX = 101; 
-        const bottomY = 879;
+        // Layer 1: Gifts (Updated Coords - Treated as (Left, Bottom))
+        const giftCoords = [
+            {x: 101, y: 879},
+            {x: 218, y: 884},
+            {x: 335, y: 891},
+            {x: 448, y: 891},
+            {x: 551, y: 903}
+        ];
         for(let i=0; i<5; i++) {
-            entities.push(new Gift(i, currentX, bottomY, giftImgs[i]));
+            entities.push(new Gift(i, giftCoords[i].x, giftCoords[i].y, giftImgs[i]));
         }
         const alignInterval = setInterval(() => {
             let allLoaded = true;
@@ -929,8 +1075,15 @@
             entities.push(new WindowPane(windowImgs.normal[i], windowImgs.broken[i], pos.x, pos.y)); 
         });
 
+        // Layer 2.5: Snow (Behind Sill, In front of Windows)
+        entities.push(new SnowTank());
+
         // Layer 3: Sill, Wreath
-        entities.push(new SimpleProp(sillImg, 1317, 232, 3));
+        // Sill set to non-collidable so hits pass through to windows
+        const sill = new SimpleProp(sillImg, 1317, 232, 3);
+        sill.collidable = false;
+        entities.push(sill);
+        
         entities.push(new Wreath());
 
         // Layer 4: Frames
@@ -1026,7 +1179,8 @@
         let hitSomething = false;
 
         for (let ent of hitOrder) {
-            if (ent.checkHit(impactX, impactY)) {
+            // Check collision only if the item is collidable
+            if (ent.collidable && ent.checkHit(impactX, impactY)) {
                 ent.onHit();
                 ent.isHit = true;
                 ent.hitTimer = 5;
