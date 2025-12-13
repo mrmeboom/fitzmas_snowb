@@ -247,6 +247,10 @@
         HIGHSCORE: 'highscore'
     };
 
+    const HIGHSCORE_FILE = 'highscores.json';
+    const HIGHSCORE_STORAGE_KEY = 'snowball-sniper-highscores';
+    let defaultHighscores = [];
+
     let state = {
         current: STATES.MENU,
         score: 0,
@@ -1246,6 +1250,64 @@
         return state.score > state.highscores[state.highscores.length - 1].score;
     }
 
+    function normalizeHighscores(list) {
+        if (!Array.isArray(list)) return [];
+        return list
+            .map(entry => ({
+                name: (entry.name || '---').toString().slice(0, 3).toUpperCase(),
+                score: Number.isFinite(entry.score) ? Math.max(0, Math.floor(entry.score)) : 0
+            }))
+            .sort((a, b) => b.score - a.score)
+            .slice(0, 10);
+    }
+
+    function persistHighscores(highscores) {
+        try {
+            localStorage.setItem(HIGHSCORE_STORAGE_KEY, JSON.stringify(highscores));
+        } catch (err) {
+            // Ignore storage errors (e.g., private mode)
+        }
+    }
+
+    async function loadHighscores() {
+        let loaded = [];
+
+        try {
+            const stored = localStorage.getItem(HIGHSCORE_STORAGE_KEY);
+            if (stored) {
+                loaded = JSON.parse(stored);
+            }
+        } catch (err) {
+            loaded = [];
+        }
+
+        if (!loaded || loaded.length === 0) {
+            try {
+                const resp = await fetch(HIGHSCORE_FILE);
+                if (resp.ok) {
+                    loaded = await resp.json();
+                }
+            } catch (err) {
+                loaded = [];
+            }
+        }
+
+        state.highscores = normalizeHighscores(loaded);
+        defaultHighscores = [...state.highscores];
+        persistHighscores(state.highscores);
+    }
+
+    function saveHighscoreEntry(name, score) {
+        const merged = [...state.highscores, { name, score }];
+        state.highscores = normalizeHighscores(merged);
+        persistHighscores(state.highscores);
+    }
+
+    function resetHighscores() {
+        state.highscores = normalizeHighscores(defaultHighscores);
+        persistHighscores(state.highscores);
+    }
+
     function showGameOver() {
         state.current = STATES.GAMEOVER;
         state.enteringInitials = false;
@@ -1283,8 +1345,13 @@
         const cx = canvas.width / 2;
         const cy = canvas.height / 2;
         
-        // Back Button
-        entities.push(new ButtonTarget(cx, cy + 350, "BACK", () => {
+        // Reset + Back Buttons
+        entities.push(new ButtonTarget(cx - 220, cy + 350, "RESET", () => {
+            resetHighscores();
+            playSound('menu');
+        }));
+
+        entities.push(new ButtonTarget(cx + 220, cy + 350, "BACK", () => {
             setupMenu();
             state.current = STATES.MENU;
         }));
@@ -1304,13 +1371,8 @@
             // Save on 3rd char? Or maybe enter key. User said "When player has entered 3 initials it saves"
             if (state.playerInitials.length === 3) {
                 // Save logic
-                state.highscores.push({
-                    name: state.playerInitials,
-                    score: state.score
-                });
-                state.highscores.sort((a,b) => b.score - a.score);
-                if (state.highscores.length > 10) state.highscores.pop();
-                
+                saveHighscoreEntry(state.playerInitials, state.score);
+
                 state.enteringInitials = false; // Stop editing
                 // Don't jump, stay here.
             }
@@ -1408,7 +1470,8 @@
         entities.push(new SoundToggle());
     }
 
-    function init() {
+    async function init() {
+        await loadHighscores();
         initLevel();
         setupMenu(); // Start in Menu
 
