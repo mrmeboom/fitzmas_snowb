@@ -264,6 +264,64 @@
     const particles = [];
     const snowballs = [];
 
+    // --- AUDIO ---
+    const musicTrack = new Audio('music/SNOWBALL_SNIPER.mp3');
+    musicTrack.loop = true;
+    musicTrack.preload = 'auto';
+    musicTrack.volume = 0.5;
+
+    const sfx = {
+        snowball: createSfx('snowball'),
+        fire: createSfx('fire'),
+        snowman: createSfx('snowman'),
+        santa: createSfx('santa'),
+        deer: createSfx('deer'),
+        lights: createSfx('lights'),
+        window: createSfx('window'),
+        elf: createSfx('elf'),
+        socks: createSfx('socks'),
+        wreath: createSfx('wreath'),
+        dog: createSfx('dog'),
+        bear: createSfx('bear'),
+        tree: createSfx('tree'),
+        gifts: createSfx('gifts'),
+        frames: createSfx('frames'),
+        menu: createSfx('menu')
+    };
+
+    function createSfx(name) {
+        const audio = new Audio(`sfx/${name}.mp3`);
+        audio.preload = 'auto';
+        return audio;
+    }
+
+    function ensureMusicPlaying() {
+        if (!state.soundEnabled) return;
+        const playPromise = musicTrack.play();
+        if (playPromise) playPromise.catch(() => {});
+    }
+
+    function updateSoundState() {
+        if (state.soundEnabled) {
+            musicTrack.muted = false;
+            ensureMusicPlaying();
+        } else {
+            musicTrack.muted = true;
+            musicTrack.pause();
+        }
+    }
+
+    function playSound(key) {
+        if (!state.soundEnabled) return;
+        const base = sfx[key];
+        if (!base) return;
+        const audio = base.cloneNode(true);
+        audio.muted = !state.soundEnabled;
+        audio.play().catch(() => {});
+    }
+
+    document.addEventListener('click', () => ensureMusicPlaying(), { once: true });
+
     // --- CLASSES ---
 
     class Particle {
@@ -416,6 +474,7 @@
             this.hitTimer = 5;
             // Particles
             for(let i=0; i<20; i++) particles.push(new Particle(this.x + this.w/2, this.y + this.h/2, '#ffd700', 20));
+            playSound('menu');
             // Trigger Action
             setTimeout(() => {
                 this.markedForDeletion = true;
@@ -469,6 +528,7 @@
             this.isHit = true;
             this.hitTimer = 5;
             for(let i=0; i<20; i++) particles.push(new Particle(this.x + this.w/2, this.y + this.h/2, '#ffffff', 15));
+            playSound('menu');
             setTimeout(() => {
                 this.markedForDeletion = true;
                 this.action();
@@ -499,6 +559,7 @@
         onClick() {
             state.soundEnabled = !state.soundEnabled;
             // No hit flash needed for toggle, just state change
+            updateSoundState();
         }
 
         draw(ctx) {
@@ -526,10 +587,11 @@
     // --- PROPS ---
 
     class SimpleProp extends Entity {
-        constructor(img, x, y, layer, onHitCallback) {
-            super(x, y, layer); 
+        constructor(img, x, y, layer, onHitCallback, soundKey = null) {
+            super(x, y, layer);
             this.img = img;
             this.onHitCallback = onHitCallback;
+            this.soundKey = soundKey;
             this.initialized = false;
         }
 
@@ -543,10 +605,11 @@
         }
 
         onHit() {
-            if (!this.onHitCallback) return; 
-            this.markedForDeletion = true; 
+            if (!this.onHitCallback) return;
+            this.markedForDeletion = true;
             state.score += 15;
             updateUI();
+            if (this.soundKey) playSound(this.soundKey);
             this.onHitCallback(this.x, this.y, this.w, this.h);
         }
 
@@ -583,9 +646,10 @@
             if (this.dying) return;
             state.score += 15;
             updateUI();
-            
+            playSound('fire');
+
             this.isHit = true;
-            this.hitTimer = 6; 
+            this.hitTimer = 6;
             this.dying = true;
         }
 
@@ -639,6 +703,7 @@
                 this.isBroken = true;
                 state.score += 15;
                 updateUI();
+                playSound('window');
                 for(let k=0; k<15; k++) particles.push(new Particle(this.x+this.w/2, this.y+this.h/2, '#a8e6cf', 12, 3));
             }
         }
@@ -683,6 +748,7 @@
                 state.score += 15;
                 updateUI();
             }
+            playSound('wreath');
         }
 
         draw(ctx) {
@@ -789,6 +855,7 @@
                     particles.push(new Particle(this.x + Math.random()*this.w, this.y + Math.random()*this.h, '#2d6e32'));
                 }
             }
+            playSound('tree');
         }
 
         draw(ctx) {
@@ -827,6 +894,7 @@
         onHit() {
             state.score += 15;
             updateUI();
+            playSound('gifts');
             this.markedForDeletion = true;
             const gridSize = 6;
             const cols = this.w / gridSize;
@@ -888,6 +956,7 @@
                 this.alive = false;
                 state.score += 15;
                 updateUI();
+                playSound('bear');
                 for(let i=0; i<8; i++) particles.push(new Particle(this.x + this.w/2, this.y + this.h/2, '#8d5524'));
             } else {
                  for(let i=0; i<3; i++) particles.push(new Particle(this.x + this.w/2, this.y + this.h/2, '#5e3a1b'));
@@ -943,11 +1012,12 @@
 
         onHit() {
             this.state = 'awake';
-            this.wakeTimer = 100; 
+            this.wakeTimer = 100;
             if (!this.hasGivenPoints) {
                 this.hasGivenPoints = true;
                 state.score += 15;
                 updateUI();
+                playSound('dog');
                 for(let i=0; i<8; i++) particles.push(new Particle(this.x + this.w/2, this.y, '#c28848'));
             } else {
                 for(let i=0; i<3; i++) particles.push(new Particle(this.x + this.w/2, this.y, '#c28848'));
@@ -1059,11 +1129,13 @@
         }
 
         onHit() {
-            if (this.dying) return; 
-            
+            if (this.dying) return;
+
             state.score += this.scoreVal;
             updateUI();
-            
+            const soundKey = this.type === 'reindeer' ? 'deer' : this.type;
+            playSound(soundKey);
+
             this.hitFilter = HIT_FILTERS[Math.floor(Math.random() * HIT_FILTERS.length)];
             
             this.isHit = true;
@@ -1300,7 +1372,7 @@
         frameCoords.forEach((pos, i) => {
             entities.push(new SimpleProp(frameImgs[i], pos.x, pos.y, 4, (x, y, w, h) => {
                 for(let k=0; k<8; k++) particles.push(new Particle(x+w/2, y+h/2, '#8b4513', 10, 3));
-            }));
+            }, 'frames'));
         });
 
         // Layer 5: Socks
@@ -1310,7 +1382,7 @@
         sockCoords.forEach((data, i) => {
             entities.push(new SimpleProp(sockImgs[i], data.x, data.y, 5, (x, y, w, h) => {
                 for(let k=0; k<12; k++) particles.push(new Particle(x+w/2, y+h/2, data.c, 6, 6));
-            }));
+            }, 'socks'));
         });
 
         // Layer 6: Lights
@@ -1325,7 +1397,7 @@
         lightCoords.forEach((pos, i) => {
             entities.push(new SimpleProp(lightImgs[i], pos.x, pos.y, 6, (x, y, w, h) => {
                 for(let k=0; k<6; k++) particles.push(new Particle(x+w/2, y+h/2, lightColors[i], 20, 2));
-            }));
+            }, 'lights'));
         });
 
         // Layer 7: Dog, Bear
@@ -1339,9 +1411,10 @@
     function init() {
         initLevel();
         setupMenu(); // Start in Menu
-        
+
         state.current = STATES.MENU;
-        
+
+        updateSoundState();
         requestAnimationFrame(gameLoop);
     }
 
@@ -1429,6 +1502,7 @@
         }
 
         // Shooting allowed in MENU, PLAYING, and GAMEOVER to hit buttons/props
+        playSound('snowball');
         snowballs.push(new Snowball(mouse.x, mouse.y));
     });
 
