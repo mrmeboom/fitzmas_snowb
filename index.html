@@ -2,10 +2,15 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>Snowball Sniper - HD Remaster</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+
+        html, body {
+            width: 100%;
+            height: 100%;
+        }
 
         body {
             margin: 0;
@@ -38,6 +43,7 @@
             background-color: #2a1d15;
             image-rendering: pixelated;
             cursor: none; 
+            touch-action: none;
         }
 
         #ui-layer {
@@ -88,6 +94,25 @@
             background-size: 100% 4px;
             pointer-events: none;
             opacity: 0.4;
+        }
+
+        @media (max-width: 900px) {
+            body {
+                background-color: #000;
+            }
+
+            #game-container {
+                width: 100vw;
+                height: 100vh;
+                max-width: 100vw;
+                max-height: 100vh;
+                border: none;
+                box-shadow: none;
+            }
+
+            #ui-layer {
+                padding: 20px;
+            }
         }
     </style>
 </head>
@@ -305,6 +330,16 @@
         if (playPromise) playPromise.catch(() => {});
     }
 
+    function requestFullscreenAndLandscape() {
+        const root = document.documentElement;
+        if (root.requestFullscreen) {
+            root.requestFullscreen().catch(() => {});
+        }
+        if (screen.orientation && screen.orientation.lock) {
+            screen.orientation.lock('landscape').catch(() => {});
+        }
+    }
+
     function updateSoundState() {
         if (state.soundEnabled) {
             musicTrack.muted = false;
@@ -324,7 +359,14 @@
         audio.play().catch(() => {});
     }
 
-    document.addEventListener('click', () => ensureMusicPlaying(), { once: true });
+    document.addEventListener('click', () => {
+        requestFullscreenAndLandscape();
+        ensureMusicPlaying();
+    }, { once: true });
+    document.addEventListener('touchstart', () => {
+        requestFullscreenAndLandscape();
+        ensureMusicPlaying();
+    }, { once: true, passive: true });
 
     // --- CLASSES ---
 
