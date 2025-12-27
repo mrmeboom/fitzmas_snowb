@@ -46,6 +46,22 @@
             touch-action: none;
         }
 
+        #initials-input {
+            position: absolute;
+            display: none;
+            background: #222;
+            color: #ffd700;
+            border: 3px solid #000;
+            box-shadow: 3px 3px 0 #000;
+            font-family: 'Press Start 2P', cursive;
+            font-size: 32px;
+            text-align: center;
+            text-transform: uppercase;
+            letter-spacing: 6px;
+            padding: 0;
+            z-index: 5;
+        }
+
         #ui-layer {
             position: absolute;
             top: 0;
@@ -113,6 +129,10 @@
             #ui-layer {
                 padding: 20px;
             }
+
+            #initials-input {
+                font-size: 28px;
+            }
         }
     </style>
 </head>
@@ -121,6 +141,7 @@
 <div id="game-container">
     <canvas id="gameCanvas" width="1974" height="1168"></canvas>
     <div class="scanlines"></div>
+    <input id="initials-input" type="text" inputmode="text" autocapitalize="characters" autocomplete="off" spellcheck="false" maxlength="3" aria-label="Enter initials">
     
     <div id="ui-layer">
         <div class="hud-item">
@@ -137,6 +158,7 @@
 <script>
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
+    const initialsInput = document.getElementById('initials-input');
     
     // --- ASSETS ---
     const bgImg = new Image();
@@ -330,6 +352,37 @@
         if (playPromise) playPromise.catch(() => {});
     }
 
+    function updateInitialsInputLayout() {
+        if (!initialsInput || !state.enteringInitials) return;
+        const rect = canvas.getBoundingClientRect();
+        const box = {
+            x: canvas.width / 2 + 20,
+            y: canvas.height / 2 + 50,
+            w: 300,
+            h: 80
+        };
+        const scaleX = rect.width / canvas.width;
+        const scaleY = rect.height / canvas.height;
+        initialsInput.style.left = `${rect.left + box.x * scaleX}px`;
+        initialsInput.style.top = `${rect.top + box.y * scaleY}px`;
+        initialsInput.style.width = `${box.w * scaleX}px`;
+        initialsInput.style.height = `${box.h * scaleY}px`;
+        initialsInput.style.fontSize = `${Math.max(16, box.h * scaleY * 0.6)}px`;
+    }
+
+    function setInitialsInputVisible(visible) {
+        if (!initialsInput) return;
+        initialsInput.style.display = visible ? 'block' : 'none';
+        if (!visible) {
+            initialsInput.blur();
+        }
+    }
+
+    function syncInitialsInputValue() {
+        if (!initialsInput) return;
+        initialsInput.value = state.playerInitials || '';
+    }
+
     function requestFullscreenAndLandscape() {
         const root = document.documentElement;
         if (root.requestFullscreen) {
@@ -367,6 +420,20 @@
         requestFullscreenAndLandscape();
         ensureMusicPlaying();
     }, { once: true, passive: true });
+
+    if (initialsInput) {
+        initialsInput.addEventListener('input', () => {
+            const sanitized = initialsInput.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 3);
+            initialsInput.value = sanitized;
+            state.playerInitials = sanitized;
+
+            if (state.playerInitials.length === 3) {
+                saveHighscoreEntry(state.playerInitials, state.score);
+                state.enteringInitials = false;
+                setInitialsInputVisible(false);
+            }
+        });
+    }
 
     // --- CLASSES ---
 
@@ -1258,6 +1325,7 @@
     function setupMenu() {
         // Clear buttons if any
         entities = entities.filter(e => !(e instanceof ButtonTarget) && !(e instanceof ImageButtonTarget));
+        setInitialsInputVisible(false);
         
         // Add Logo & Buttons
         const cx = canvas.width / 2;
@@ -1274,6 +1342,7 @@
         state.score = 0;
         state.time = 60;
         updateUI();
+        setInitialsInputVisible(false);
         
         // Clear buttons
         entities = entities.filter(e => !(e instanceof ButtonTarget) && !(e instanceof ImageButtonTarget));
@@ -1363,6 +1432,10 @@
             state.playerInitials = "";
         }
 
+        setInitialsInputVisible(state.enteringInitials);
+        syncInitialsInputValue();
+        updateInitialsInputLayout();
+
         // Add 3 Icon Buttons
         const iconY = cy + 300;
         const spacing = 70 + 120; // Width + gap
@@ -1381,6 +1454,7 @@
 
     function showHighscores() {
         state.current = STATES.HIGHSCORE;
+        setInitialsInputVisible(false);
         // Clear Buttons
         entities = entities.filter(e => !(e instanceof ButtonTarget) && !(e instanceof ImageButtonTarget));
         
@@ -1401,6 +1475,9 @@
 
     // Input Handling for Initials
     window.addEventListener('keydown', (e) => {
+        if (document.activeElement === initialsInput) {
+            return;
+        }
         if (state.current === STATES.GAMEOVER && state.enteringInitials) {
             if (e.key.length === 1 && e.key.match(/[a-zA-Z0-9]/)) {
                 if (state.playerInitials.length < 3) {
@@ -1409,6 +1486,7 @@
             } else if (e.key === 'Backspace') {
                 state.playerInitials = state.playerInitials.slice(0, -1);
             }
+            syncInitialsInputValue();
 
             // Save on 3rd char? Or maybe enter key. User said "When player has entered 3 initials it saves"
             if (state.playerInitials.length === 3) {
@@ -1416,9 +1494,14 @@
                 saveHighscoreEntry(state.playerInitials, state.score);
 
                 state.enteringInitials = false; // Stop editing
+                setInitialsInputVisible(false);
                 // Don't jump, stay here.
             }
         }
+    });
+
+    window.addEventListener('resize', () => {
+        updateInitialsInputLayout();
     });
 
     function initLevel() {
@@ -1767,6 +1850,10 @@
             ctx.moveTo(mouse.x, mouse.y - 50); ctx.lineTo(mouse.x, mouse.y + 50);
             ctx.stroke();
             ctx.fillStyle = 'red'; ctx.fillRect(mouse.x - 2, mouse.y - 2, 4, 4);
+        }
+
+        if (state.enteringInitials) {
+            updateInitialsInputLayout();
         }
 
         requestAnimationFrame(gameLoop);
